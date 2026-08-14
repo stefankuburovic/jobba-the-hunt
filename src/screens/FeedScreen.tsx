@@ -1,0 +1,236 @@
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Linking,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { fetchAllJobs } from "../api";
+import { JobCard } from "../components/JobCard";
+import { Starfield } from "../components/Starfield";
+import { useApplications } from "../context/ApplicationsContext";
+import { palette, spacing, type } from "../theme";
+import { Job } from "../types";
+
+export function FeedScreen() {
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [search, setSearch] = useState("frontend");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { saveJob, isSaved } = useApplications();
+
+  const load = useCallback(async (query: string) => {
+    setError(null);
+    const { jobs: results, failedSources } = await fetchAllJobs(query);
+    setJobs(results);
+    if (failedSources.length > 0) {
+      setError(`Lost contact with ${failedSources.join(", ")} — showing the rest`);
+    }
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    load(search).finally(() => setLoading(false));
+    // Only re-run on mount — search is applied on submit, not on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load(search);
+    setRefreshing(false);
+  }, [load, search]);
+
+  const onSubmitSearch = useCallback(async () => {
+    setLoading(true);
+    await load(search);
+    setLoading(false);
+  }, [load, search]);
+
+  const onSave = useCallback(
+    (job: Job) => {
+      saveJob(job);
+    },
+    [saveJob]
+  );
+
+  const onApply = useCallback(
+    async (job: Job) => {
+      await saveJob(job); // saving first means "Apply" always leaves a tracker row
+      const can = await Linking.canOpenURL(job.url);
+      if (can) {
+        Linking.openURL(job.url);
+      } else {
+        Alert.alert("Comms down", `Couldn't open the posting:\n${job.url}`);
+      }
+    },
+    [saveJob]
+  );
+
+  return (
+    <View style={styles.container}>
+      <Starfield />
+
+      <View style={styles.scanBar}>
+        <Text style={styles.scanLabel}>Scanning for</Text>
+        <View style={styles.searchRow}>
+          <TextInput
+            style={styles.searchInput}
+            value={search}
+            onChangeText={setSearch}
+            onSubmitEditing={onSubmitSearch}
+            placeholder="react, angular, typescript…"
+            placeholderTextColor={palette.textFaint}
+            selectionColor={palette.crawl}
+            returnKeyType="search"
+          />
+          <Pressable style={styles.searchButton} onPress={onSubmitSearch}>
+            <Text style={styles.searchButtonText}>Scan</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {error && <Text style={styles.errorBanner}>{error}</Text>}
+
+      {loading ? (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator size="large" color={palette.crawl} />
+          <Text style={styles.loadingText}>Sweeping the Outer Rim…</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={jobs}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingBottom: spacing.xl }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={palette.crawl}
+              colors={[palette.crawl]}
+            />
+          }
+          ListEmptyComponent={
+            <Text style={styles.empty}>
+              These aren't the jobs you're looking for.{"\n"}Try a different scan term.
+            </Text>
+          }
+          renderItem={({ item }) => (
+            <View>
+              <JobCard job={item} />
+              <View style={styles.actionRow}>
+                <Pressable
+                  style={[styles.actionButton, isSaved(item.id) && styles.trackedButton]}
+                  disabled={isSaved(item.id)}
+                  onPress={() => onSave(item)}
+                >
+                  <Text
+                    style={[
+                      styles.actionButtonText,
+                      isSaved(item.id) && styles.trackedButtonText,
+                    ]}
+                  >
+                    {isSaved(item.id) ? "Tracking ✓" : "Track target"}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.actionButton, styles.applyButton]}
+                  onPress={() => onApply(item)}
+                >
+                  <Text style={[styles.actionButtonText, styles.applyButtonText]}>
+                    Engage →
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+        />
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: palette.void },
+  scanBar: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+    backgroundColor: "rgba(14,19,28,0.85)",
+  },
+  scanLabel: {
+    ...type.label,
+    fontSize: 9,
+    color: palette.textFaint,
+    marginBottom: spacing.xs,
+  },
+  searchRow: { flexDirection: "row", gap: spacing.sm },
+  searchInput: {
+    ...type.body,
+    flex: 1,
+    backgroundColor: palette.panelAlt,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: 3,
+    color: palette.text,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  searchButton: {
+    borderWidth: 1,
+    borderColor: palette.crawl,
+    borderRadius: 3,
+    paddingHorizontal: spacing.lg,
+    justifyContent: "center",
+  },
+  searchButtonText: { ...type.label, fontSize: 12, color: palette.crawl },
+  errorBanner: {
+    ...type.label,
+    fontSize: 10,
+    color: palette.crawl,
+    backgroundColor: "rgba(255,232,31,0.08)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,232,31,0.25)",
+    padding: spacing.sm,
+    textAlign: "center",
+  },
+  loadingBox: { marginTop: 60, alignItems: "center", gap: spacing.md },
+  loadingText: { ...type.label, fontSize: 11, color: palette.textDim },
+  empty: {
+    ...type.body,
+    textAlign: "center",
+    color: palette.textDim,
+    marginTop: 60,
+    paddingHorizontal: spacing.xl,
+    lineHeight: 22,
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+  },
+  actionButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.panelAlt,
+    borderRadius: 3,
+    paddingVertical: spacing.sm + 2,
+    alignItems: "center",
+  },
+  actionButtonText: { ...type.label, fontSize: 11, color: palette.textDim },
+  trackedButton: { borderColor: "rgba(74,222,128,0.4)" },
+  trackedButtonText: { color: palette.saberGreen },
+  applyButton: { borderColor: palette.crawl, backgroundColor: "rgba(255,232,31,0.08)" },
+  applyButtonText: { color: palette.crawl },
+});
