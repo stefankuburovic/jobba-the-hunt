@@ -140,7 +140,7 @@ export function FeedScreen() {
 
       // Wind the effect back down behind the browser, so returning to the
       // app lands on the normal feed rather than a white screen.
-      setTimeout(reset, 600);
+      setTimeout(reset, 900);
     },
     [saveJob, jumpToLightspeed, reset]
   );
@@ -333,7 +333,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1,
     borderColor: palette.border,
-    backgroundColor: palette.panelAlt,
+    backgroundColor: palette.panelAltTranslucent,
     borderRadius: 3,
     paddingVertical: spacing.sm + 2,
     alignItems: "center",

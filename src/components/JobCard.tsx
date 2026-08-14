@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { findStarWarsReference, referenceBadge } from "../starwars";
 import { Job } from "../types";
 import { holoPanel, palette, spacing, type } from "../theme";
 
@@ -17,9 +18,21 @@ function timeAgo(iso: string): string {
  * sells it as a projected hologram rather than a flat card.
  */
 export function JobCard({ job }: { job: Job }) {
+  const reference = useMemo(
+    () => findStarWarsReference(job.title, job.description),
+    [job.title, job.description]
+  );
+
   return (
-    <View style={styles.card}>
-      <View style={styles.topEdge} />
+    <View style={[styles.card, reference && styles.cardFlagged]}>
+      <View style={[styles.topEdge, reference && styles.topEdgeFlagged]} />
+
+      {reference && (
+        <View style={styles.refRow}>
+          <Text style={styles.refBadge}>★ {referenceBadge(reference)}</Text>
+          <Text style={styles.refNote}>one of us</Text>
+        </View>
+      )}
 
       <View style={styles.headerRow}>
         <Text style={styles.title} numberOfLines={2}>
@@ -63,6 +76,22 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     overflow: "hidden",
   },
+  // A flagged card trades the blue projector beam for crawl yellow, so it
+  // reads as special at a glance while scrolling.
+  cardFlagged: {
+    borderColor: "rgba(255,232,31,0.55)",
+    backgroundColor: "rgba(26,23,10,0.78)",
+    shadowColor: palette.crawl,
+    shadowOpacity: 0.28,
+  },
+  refRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  refBadge: { ...type.label, fontSize: 9, color: palette.crawl },
+  refNote: { ...type.body, fontSize: 9, color: palette.textFaint },
   // The projector beam along the top of the panel.
   topEdge: {
     position: "absolute",
@@ -73,6 +102,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.saberBlue,
     opacity: 0.55,
   },
+  topEdgeFlagged: { backgroundColor: palette.crawl, opacity: 0.9 },
   headerRow: { flexDirection: "row", justifyContent: "space-between", gap: spacing.sm },
   title: {
     ...type.display,

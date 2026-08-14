@@ -8,6 +8,10 @@ import { Platform, TextStyle } from "react-native";
 export const palette = {
   void: "#05060A", // deep space — app background
   panel: "#0E131C", // holo panel surface
+  // Cards sit on the starfield, so their fill is deliberately translucent —
+  // the stars have to keep drifting behind the content.
+  panelTranslucent: "rgba(14,19,28,0.74)",
+  panelAltTranslucent: "rgba(20,27,39,0.72)",
   panelAlt: "#141B27", // raised surface (chips, inputs)
   border: "#22304A", // panel edge
   borderBright: "#3A5580",
@@ -59,7 +63,7 @@ export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
 
 // A holo panel: dark fill, lit edge, soft blue bloom underneath.
 export const holoPanel = {
-  backgroundColor: palette.panel,
+  backgroundColor: palette.panelTranslucent,
   borderWidth: 1,
   borderColor: palette.border,
   borderRadius: 4, // sharp-ish corners read more "cockpit console" than pill

@@ -42,7 +42,7 @@ export function StarfieldProvider({ children }: { children: React.ReactNode }) {
   if (!started.current) {
     started.current = true;
     twinkles.forEach((value, i) => {
-      const duration = 1400 + i * 420;
+      const duration = 2400 + i * 640;
       const loop = () =>
         Animated.sequence([
           Animated.timing(value, {
@@ -68,13 +68,13 @@ export function StarfieldProvider({ children }: { children: React.ReactNode }) {
     Animated.sequence([
       Animated.timing(warp, {
         toValue: 1,
-        duration: 260,
+        duration: 460,
         easing: Easing.in(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(warp, {
         toValue: 0,
-        duration: 520,
+        duration: 900,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
@@ -87,13 +87,13 @@ export function StarfieldProvider({ children }: { children: React.ReactNode }) {
         Animated.sequence([
           Animated.timing(warp, {
             toValue: 1,
-            duration: 420,
+            duration: 780,
             easing: Easing.in(Easing.cubic),
             useNativeDriver: true,
           }),
           Animated.timing(whiteout, {
             toValue: 1,
-            duration: 280,
+            duration: 480,
             easing: Easing.out(Easing.quad),
             useNativeDriver: true,
           }),
@@ -106,12 +106,12 @@ export function StarfieldProvider({ children }: { children: React.ReactNode }) {
     Animated.parallel([
       Animated.timing(whiteout, {
         toValue: 0,
-        duration: 420,
+        duration: 620,
         useNativeDriver: true,
       }),
       Animated.timing(warp, {
         toValue: 0,
-        duration: 520,
+        duration: 900,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),

@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
   chip: {
     borderWidth: 1,
     borderColor: palette.border,
-    backgroundColor: palette.panelAlt,
+    backgroundColor: palette.panelAltTranslucent,
     borderRadius: 3,
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
   statusPill: {
     borderWidth: 1,
     borderColor: palette.border,
-    backgroundColor: palette.panelAlt,
+    backgroundColor: palette.panelAltTranslucent,
     borderRadius: 3,
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 5,
