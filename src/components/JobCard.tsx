@@ -21,6 +21,10 @@ function timeAgo(iso: string): string {
  */
 export function JobCard({ job }: { job: Job }) {
   const pay = salaryLabel(job);
+  // Several boards send an empty string rather than omitting the field, and
+  // `??` only catches null/undefined — so an empty location rendered as a
+  // stray leading separator: "· TODAY".
+  const place = job.location?.trim() || "Deep space / remote";
   const reference = useMemo(
     () => findStarWarsReference(job.title, job.description),
     [job.title, job.description]
@@ -49,7 +53,7 @@ export function JobCard({ job }: { job: Job }) {
       <Text style={styles.company}>{job.company}</Text>
 
       <Text style={styles.meta}>
-        {(job.location ?? "Deep space / remote").toUpperCase()} · {timeAgo(job.postedDate)}
+        {place.toUpperCase()} · {timeAgo(job.postedDate)}
       </Text>
 
       {pay && <Text style={styles.pay}>{pay}</Text>}
