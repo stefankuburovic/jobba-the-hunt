@@ -12,9 +12,11 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { FeedCursor, fetchFeedPage } from "../api";
+import { ALL_SOURCE_FILTERS, FeedCursor, fetchFeedPage, SourceFilter } from "../api";
 import { requiredAttributions, SOURCES } from "../api/sources";
 import { JobCard } from "../components/JobCard";
+import { ScanTicker, useScanTicker } from "../components/ScanTicker";
+import { SourcePicker } from "../components/SourcePicker";
 import { Starfield } from "../components/Starfield";
 import { useStarfield } from "../components/StarfieldProvider";
 import { useApplications } from "../context/ApplicationsContext";
@@ -49,10 +51,13 @@ export function FeedScreen() {
   const [exhausted, setExhausted] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sources, setSources] = useState<SourceFilter[]>(ALL_SOURCE_FILTERS);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const { saveJob, isSaved } = useApplications();
   const { targets } = useTargets();
   const { burst, jumpToLightspeed, reset } = useStarfield();
+  const scan = useScanTicker();
 
   const cursor = useRef<FeedCursor | null>(null);
   const seenIds = useRef(new Set<string>());
@@ -74,7 +79,9 @@ export function FeedScreen() {
         const result = await fetchFeedPage({
           search: query,
           targets,
+          sources,
           cursor: cursor.current,
+          onProgress: scan.push,
         });
         cursor.current = result.cursor;
         setExhausted(result.cursor === null);
@@ -102,16 +109,21 @@ export function FeedScreen() {
         inFlight.current = false;
       }
     },
-    [targets]
+    [targets, sources, scan]
   );
 
   useEffect(() => {
     setLoading(true);
-    load(search, "reset").finally(() => setLoading(false));
-    // Re-runs when the target list changes, since that changes which sources
-    // the feed has. Search is applied on submit, not on every keystroke.
+    scan.clear();
+    load(search, "reset").finally(() => {
+      setLoading(false);
+      scan.clear();
+    });
+    // Re-runs when the watched employers or the enabled sources change, since
+    // both change which boards get contacted. Search is applied on submit,
+    // not on every keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targets]);
+  }, [targets, sources]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -222,6 +234,23 @@ export function FeedScreen() {
           <View style={styles.divider} />
 
           <Pressable
+            style={[
+              styles.control,
+              sources.length < ALL_SOURCE_FILTERS.length && styles.controlOn,
+            ]}
+            onPress={() => setPickerOpen(true)}
+          >
+            <Text
+              style={[
+                styles.controlText,
+                sources.length < ALL_SOURCE_FILTERS.length && styles.controlTextOn,
+              ]}
+            >
+              Sources {sources.length}/{ALL_SOURCE_FILTERS.length}
+            </Text>
+          </Pressable>
+
+          <Pressable
             style={[styles.control, filters.remoteOnly && styles.controlOn]}
             onPress={() => toggle("remoteOnly")}
           >
@@ -263,6 +292,7 @@ export function FeedScreen() {
         <View style={styles.loadingBox}>
           <ActivityIndicator size="large" color={palette.crawl} />
           <Text style={styles.loadingText}>Sweeping the Outer Rim…</Text>
+          <ScanTicker event={scan.current} />
         </View>
       ) : (
         <FlatList
@@ -345,6 +375,20 @@ export function FeedScreen() {
           )}
         />
       )}
+      <SourcePicker
+        visible={pickerOpen}
+        enabled={sources}
+        targetCount={targets.length}
+        onToggle={(source) =>
+          setSources((prev) =>
+            prev.includes(source)
+              ? prev.filter((s) => s !== source)
+              : [...prev, source]
+          )
+        }
+        onSetAll={(all) => setSources(all ? ALL_SOURCE_FILTERS : [])}
+        onClose={() => setPickerOpen(false)}
+      />
     </View>
   );
 }

@@ -1,4 +1,4 @@
-import { Job } from "../types";
+import { AggregatorSource, Job } from "../types";
 import { fetchArbeitnowPage, RateLimitError } from "./arbeitnow";
 import { withoutExcludedIndustries } from "./excluded";
 import { fetchGreenhouseJobs, UnknownCompanyError } from "./greenhouse";
@@ -17,12 +17,41 @@ export interface FeedCursor {
   himalayasOffset: number;
 }
 
+/** A source answering, reported as it lands so the UI can narrate the scan. */
+export interface ScanEvent {
+  label: string;
+  count: number;
+  ok: boolean;
+}
+
+/** Every toggleable source, including Greenhouse as one combined entry. */
+export type SourceFilter = AggregatorSource | "greenhouse";
+
+export const ALL_SOURCE_FILTERS: SourceFilter[] = [
+  "remotive",
+  "arbeitnow",
+  "remoteok",
+  "jobicy",
+  "themuse",
+  "himalayas",
+  "weworkremotely",
+  "greenhouse",
+];
+
 export interface FeedRequest {
   /** Empty means "show me everything" — no keyword filtering at all. */
   search?: string;
   /** Greenhouse company slugs the user is targeting (Phase 4). */
   targets?: string[];
+  /** Which sources to actually contact; omitted means all of them. */
+  sources?: SourceFilter[];
   cursor?: FeedCursor | null;
+  /**
+   * Fires as each source answers. The boards are queried in parallel — doing
+   * it sequentially would make a load eight times longer — so these arrive
+   * in the order the sources respond, not the order they were called.
+   */
+  onProgress?: (event: ScanEvent) => void;
 }
 
 export interface FeedResult {
@@ -78,8 +107,13 @@ function filterJobs(jobs: Job[], keywords: string[] | null): Job[] {
 export async function fetchFeedPage({
   search = "",
   targets = [],
+  sources = ALL_SOURCE_FILTERS,
   cursor = null,
+  onProgress,
 }: FeedRequest = {}): Promise<FeedResult> {
+  const enabled = (id: SourceFilter) => sources.includes(id);
+  const report = (label: string, count: number, ok: boolean) =>
+    onProgress?.({ label, count, ok });
   const isFirstBatch = cursor === null;
   // An empty box is a deliberate "browse everything", not a reason to fall
   // back to a hardcoded frontend filter.
@@ -96,32 +130,58 @@ export async function fetchFeedPage({
   };
 
   if (isFirstBatch) {
-    const oneShot: Array<{ label: string; run: () => Promise<Job[]> }> = [
-      { label: "Remotive", run: () => fetchRemotiveJobs(search) },
-      { label: "Remote OK", run: fetchRemoteOkJobs },
-      { label: "Jobicy", run: fetchJobicyJobs },
-      { label: "We Work Remotely", run: fetchWeWorkRemotelyJobs },
-      ...targets.map((slug) => ({
-        label: slug,
-        run: async () => {
-          const found = await fetchGreenhouseJobs(slug);
-          return filterJobs(found, keywords)
-            .sort(byNewest)
-            .slice(0, GREENHOUSE_CAP_PER_COMPANY);
-        },
-      })),
-    ];
+    const oneShot: Array<{ label: string; run: () => Promise<Job[]> }> = [];
 
-    const settled = await Promise.allSettled(oneShot.map((s) => s.run()));
+    if (enabled("remotive")) {
+      oneShot.push({ label: "Remotive", run: () => fetchRemotiveJobs(search) });
+    }
+    if (enabled("remoteok")) {
+      oneShot.push({ label: "Remote OK", run: fetchRemoteOkJobs });
+    }
+    if (enabled("jobicy")) {
+      oneShot.push({ label: "Jobicy", run: fetchJobicyJobs });
+    }
+    if (enabled("weworkremotely")) {
+      oneShot.push({ label: "We Work Remotely", run: fetchWeWorkRemotelyJobs });
+    }
+    if (enabled("greenhouse")) {
+      for (const slug of targets) {
+        oneShot.push({
+          label: slug,
+          run: async () => {
+            const found = await fetchGreenhouseJobs(slug);
+            return filterJobs(found, keywords)
+              .sort(byNewest)
+              .slice(0, GREENHOUSE_CAP_PER_COMPANY);
+          },
+        });
+      }
+    }
+
+    // Reported as each one lands, not as each is started: they all start at
+    // the same instant, so start events would arrive as one useless burst.
+    const settled = await Promise.allSettled(
+      oneShot.map(async (source) => {
+        try {
+          const found = filterJobs(await source.run(), keywords);
+          report(source.label, found.length, true);
+          return found;
+        } catch (err) {
+          report(source.label, 0, false);
+          throw err;
+        }
+      })
+    );
+
     settled.forEach((result, i) => {
       if (result.status === "fulfilled") {
-        // Greenhouse entries filtered themselves above (they also cap), so
-        // re-filtering here is harmless and keeps boards consistent.
-        jobs.push(...filterJobs(result.value, keywords));
+        jobs.push(...result.value);
       } else {
         const err = result.reason;
         note(
-          err instanceof UnknownCompanyError ? `${err.slug} (unknown board)` : oneShot[i].label,
+          err instanceof UnknownCompanyError
+            ? `${err.slug} (unknown board)`
+            : oneShot[i].label,
           err
         );
       }
@@ -136,7 +196,9 @@ export async function fetchFeedPage({
   let museHasNext = true;
   let himalayasHasNext = true;
 
-  const arbeitnowMaxPages = keywords
+  const arbeitnowMaxPages = !enabled("arbeitnow")
+    ? 0
+    : keywords
     ? ARBEITNOW_MAX_PAGES_SEARCHING
     : ARBEITNOW_MAX_PAGES_BROWSING;
   let arbeitnowFound = 0;
@@ -164,23 +226,40 @@ export async function fetchFeedPage({
     }
   }
 
-  try {
-    const page = await fetchMusePage(musePage);
-    jobs.push(...filterJobs(page.jobs, keywords));
-    museHasNext = page.hasNext;
-    musePage += 1;
-  } catch (err) {
-    note("The Muse", err);
+  if (enabled("arbeitnow")) report("Arbeitnow", arbeitnowFound, arbeitnowHasNext);
+  else arbeitnowHasNext = false;
+
+  if (enabled("themuse")) {
+    try {
+      const page = await fetchMusePage(musePage);
+      const kept = filterJobs(page.jobs, keywords);
+      jobs.push(...kept);
+      museHasNext = page.hasNext;
+      musePage += 1;
+      report("The Muse", kept.length, true);
+    } catch (err) {
+      note("The Muse", err);
+      report("The Muse", 0, false);
+      museHasNext = false;
+    }
+  } else {
     museHasNext = false;
   }
 
-  try {
-    const found = await fetchHimalayasJobs(himalayasOffset);
-    jobs.push(...filterJobs(found, keywords));
-    himalayasHasNext = found.length === HIMALAYAS_PAGE_SIZE;
-    himalayasOffset += HIMALAYAS_PAGE_SIZE;
-  } catch (err) {
-    note("Himalayas", err);
+  if (enabled("himalayas")) {
+    try {
+      const found = await fetchHimalayasJobs(himalayasOffset);
+      const kept = filterJobs(found, keywords);
+      jobs.push(...kept);
+      himalayasHasNext = found.length === HIMALAYAS_PAGE_SIZE;
+      himalayasOffset += HIMALAYAS_PAGE_SIZE;
+      report("Himalayas", kept.length, true);
+    } catch (err) {
+      note("Himalayas", err);
+      report("Himalayas", 0, false);
+      himalayasHasNext = false;
+    }
+  } else {
     himalayasHasNext = false;
   }
 
