@@ -49,7 +49,7 @@ export function OpeningCrawl({ onDone }: { onDone: () => void }) {
 
   return (
     <Animated.View style={[styles.root, { opacity: fade }]}>
-      <Starfield count={120} />
+      <Starfield count={90} />
       <Pressable style={StyleSheet.absoluteFill} onPress={finish}>
         <View style={styles.stage}>
           <Animated.View

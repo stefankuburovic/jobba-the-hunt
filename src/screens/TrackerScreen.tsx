@@ -12,6 +12,7 @@ import {
   addInterviewEvent,
   removeInterviewEvent,
 } from "../calendar/interviewCalendar";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { InterviewScheduler } from "../components/InterviewScheduler";
 import { JobCard } from "../components/JobCard";
 import { Starfield } from "../components/Starfield";
@@ -33,6 +34,7 @@ export function TrackerScreen() {
   const { applications, setStatus, setInterview, removeJob } = useApplications();
   const [filter, setFilter] = useState<ApplicationStatus | "all">("all");
   const [scheduling, setScheduling] = useState<Application | null>(null);
+  const [jettisoning, setJettisoning] = useState<Application | null>(null);
 
   const list = useMemo(() => {
     const all = Object.values(applications).sort(
@@ -96,11 +98,12 @@ export function TrackerScreen() {
     }
   };
 
-  const confirmRemove = (app: Application) => {
-    Alert.alert("Jettison this bounty?", app.job.title, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Jettison", style: "destructive", onPress: () => removeJob(app.jobId) },
-    ]);
+  const onJettison = async (app: Application) => {
+    setJettisoning(null);
+    // Take the calendar event with it, or the interview reminder outlives
+    // the bounty it belongs to.
+    if (app.calendarEventId) await removeInterviewEvent(app.calendarEventId);
+    await removeJob(app.jobId);
   };
 
   return (
@@ -186,13 +189,30 @@ export function TrackerScreen() {
               <Pressable onPress={() => Linking.openURL(item.job.url)}>
                 <Text style={styles.link}>Open posting ↗</Text>
               </Pressable>
-              <Pressable onPress={() => confirmRemove(item)}>
+              <Pressable onPress={() => setJettisoning(item)}>
                 <Text style={[styles.link, styles.removeLink]}>Jettison</Text>
               </Pressable>
             </View>
           </View>
         )}
       />
+
+      {jettisoning && (
+        <ConfirmDialog
+          visible
+          destructive
+          title="Jettison this bounty?"
+          subject={`${jettisoning.job.title} @ ${jettisoning.job.company}`}
+          body={
+            jettisoning.calendarEventId
+              ? "Removed from your tracker, and its interview event is deleted from your calendar. The posting itself stays online."
+              : "Removed from your tracker. The posting itself stays online — you can find it again from the Bounty Board."
+          }
+          confirmLabel="Jettison"
+          onConfirm={() => onJettison(jettisoning)}
+          onCancel={() => setJettisoning(null)}
+        />
+      )}
 
       {scheduling && (
         <InterviewScheduler

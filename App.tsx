@@ -6,6 +6,7 @@ import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { OpeningCrawl } from "./src/components/OpeningCrawl";
+import { StarfieldProvider } from "./src/components/StarfieldProvider";
 import {
   ApplicationsProvider,
   useApplications,
@@ -54,7 +55,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ApplicationsProvider>
-        <Root />
+        <StarfieldProvider>
+          <Root />
+        </StarfieldProvider>
       </ApplicationsProvider>
     </SafeAreaProvider>
   );

@@ -14,6 +14,7 @@ import {
 import { FeedCursor, fetchFeedPage } from "../api";
 import { JobCard } from "../components/JobCard";
 import { Starfield } from "../components/Starfield";
+import { useStarfield } from "../components/StarfieldProvider";
 import { useApplications } from "../context/ApplicationsContext";
 import { failureLine, failureMessage } from "../messages";
 import { palette, spacing, type } from "../theme";
@@ -29,6 +30,7 @@ export function FeedScreen() {
   const [rateLimited, setRateLimited] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { saveJob, isSaved } = useApplications();
+  const { burst, jumpToLightspeed, reset } = useStarfield();
 
   // Cursor and seen-ids live in refs: they're read inside async loads and
   // must reflect the latest fetch, not the render that scheduled it.
@@ -115,22 +117,32 @@ export function FeedScreen() {
   const onSave = useCallback(
     (job: Job) => {
       saveJob(job);
+      burst(); // a quick punch to lightspeed acknowledges the catch
     },
-    [saveJob]
+    [saveJob, burst]
   );
 
   const onApply = useCallback(
     async (job: Job) => {
       await saveJob(job); // saving first means "Apply" always leaves a tracker row
+
       const can = await Linking.canOpenURL(job.url);
-      if (can) {
-        Linking.openURL(job.url);
-      } else {
+      if (!can) {
         const { headline, detail } = failureMessage("link_failed");
         Alert.alert(headline, `${detail}\n\n${job.url}`);
+        return;
       }
+
+      // Jump first, hand off second: the screen is fully white before the
+      // browser takes over, so there's no half-faded app behind it.
+      await jumpToLightspeed();
+      await Linking.openURL(job.url);
+
+      // Wind the effect back down behind the browser, so returning to the
+      // app lands on the normal feed rather than a white screen.
+      setTimeout(reset, 600);
     },
-    [saveJob]
+    [saveJob, jumpToLightspeed, reset]
   );
 
   return (
