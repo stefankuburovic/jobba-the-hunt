@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -6,86 +6,112 @@ import {
   Linking,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
 import { FeedCursor, fetchFeedPage } from "../api";
+import { requiredAttributions, SOURCES } from "../api/sources";
 import { JobCard } from "../components/JobCard";
 import { Starfield } from "../components/Starfield";
 import { useStarfield } from "../components/StarfieldProvider";
 import { useApplications } from "../context/ApplicationsContext";
+import { useTargets } from "../context/TargetsContext";
 import { failureLine, failureMessage } from "../messages";
+import { findStarWarsReference } from "../starwars";
+import {
+  applyFilters,
+  DEFAULT_FILTERS,
+  FeedFilters,
+  SORT_LABELS,
+  SORT_ORDER,
+  SortMode,
+  sortJobs,
+} from "../sorting";
 import { palette, spacing, type } from "../theme";
 import { Job } from "../types";
 
+const isFlagged = (job: Job) =>
+  findStarWarsReference(job.title, job.description) !== null;
+
 export function FeedScreen() {
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [search, setSearch] = useState("frontend");
+  // Starts empty on purpose: the feed opens on everything the boards have,
+  // and a keyword narrows it only when you actually type one.
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortMode>("newest");
+  const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FILTERS);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [exhausted, setExhausted] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const { saveJob, isSaved } = useApplications();
+  const { targets } = useTargets();
   const { burst, jumpToLightspeed, reset } = useStarfield();
 
-  // Cursor and seen-ids live in refs: they're read inside async loads and
-  // must reflect the latest fetch, not the render that scheduled it.
   const cursor = useRef<FeedCursor | null>(null);
   const seenIds = useRef(new Set<string>());
-  // Guards against onEndReached firing repeatedly while a page is in flight.
   const inFlight = useRef(false);
 
-  const load = useCallback(async (query: string, mode: "reset" | "more") => {
-    if (inFlight.current) return;
-    inFlight.current = true;
+  const load = useCallback(
+    async (query: string, mode: "reset" | "more") => {
+      if (inFlight.current) return;
+      inFlight.current = true;
 
-    try {
-      if (mode === "reset") {
-        cursor.current = null;
-        seenIds.current = new Set();
-        setExhausted(false);
-        setError(null);
+      try {
+        if (mode === "reset") {
+          cursor.current = null;
+          seenIds.current = new Set();
+          setExhausted(false);
+          setError(null);
+        }
+
+        const result = await fetchFeedPage({
+          search: query,
+          targets,
+          cursor: cursor.current,
+        });
+        cursor.current = result.cursor;
+        setExhausted(result.cursor === null);
+        setRateLimited(result.rateLimited);
+
+        // Eight sources overlap heavily, so dedupe against everything on screen.
+        const fresh = result.jobs.filter((j) => !seenIds.current.has(j.id));
+        for (const j of fresh) seenIds.current.add(j.id);
+
+        setJobs((prev) => (mode === "reset" ? fresh : [...prev, ...fresh]));
+
+        // Offline outranks a source outage: if the phone has no signal,
+        // naming the boards that "failed" would blame the wrong thing.
+        setError(
+          result.offline
+            ? failureLine("offline")
+            : result.failedSources.length > 0
+              ? failureLine(
+                  "source_down",
+                  `${result.failedSources.join(", ")} went quiet. Showing the rest.`
+                )
+              : null
+        );
+      } finally {
+        inFlight.current = false;
       }
-
-      const result = await fetchFeedPage(query, cursor.current);
-      cursor.current = result.cursor;
-      setExhausted(result.cursor === null);
-      setRateLimited(result.rateLimited);
-
-      // The sources overlap and Arbeitnow pages can repeat a posting, so
-      // dedupe against everything already on screen.
-      const fresh = result.jobs.filter((j) => !seenIds.current.has(j.id));
-      for (const j of fresh) seenIds.current.add(j.id);
-
-      setJobs((prev) => (mode === "reset" ? fresh : [...prev, ...fresh]));
-
-      // Offline outranks a source outage: if the phone has no signal, naming
-      // the boards that "failed" would blame the wrong thing.
-      setError(
-        result.offline
-          ? failureLine("offline")
-          : result.failedSources.length > 0
-            ? failureLine(
-                "source_down",
-                `${result.failedSources.join(", ")} went quiet. Showing the rest.`
-              )
-            : null
-      );
-    } finally {
-      inFlight.current = false;
-    }
-  }, []);
+    },
+    [targets]
+  );
 
   useEffect(() => {
     setLoading(true);
     load(search, "reset").finally(() => setLoading(false));
-    // Only re-run on mount — search is applied on submit, not on every keystroke.
+    // Re-runs when the target list changes, since that changes which sources
+    // the feed has. Search is applied on submit, not on every keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [targets]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -106,8 +132,8 @@ export function FeedScreen() {
   }, [load, search]);
 
   const onEndReached = useCallback(() => {
-    // `rateLimited` deliberately blocks the automatic path: retrying on every
-    // scroll would just dig the 429 deeper. The footer offers a manual retry.
+    // `rateLimited` blocks the automatic path: retrying on every scroll
+    // would just dig the 429 deeper. The footer offers a manual retry.
     if (loading || loadingMore || exhausted || rateLimited || inFlight.current) {
       return;
     }
@@ -145,19 +171,28 @@ export function FeedScreen() {
     [saveJob, jumpToLightspeed, reset]
   );
 
+  // Sorting and filtering are view concerns: they reshape what's already
+  // loaded rather than re-querying eight boards.
+  const visible = useMemo(
+    () => sortJobs(applyFilters(jobs, filters, isFlagged), sort),
+    [jobs, filters, sort]
+  );
+
+  const toggle = (key: keyof FeedFilters) =>
+    setFilters((f) => ({ ...f, [key]: !f[key] }));
+
   return (
     <View style={styles.container}>
       <Starfield />
 
       <View style={styles.scanBar}>
-        <Text style={styles.scanLabel}>Scanning for</Text>
         <View style={styles.searchRow}>
           <TextInput
             style={styles.searchInput}
             value={search}
             onChangeText={setSearch}
             onSubmitEditing={onSubmitSearch}
-            placeholder="react, angular, typescript…"
+            placeholder="Everything — or type react, python, design…"
             placeholderTextColor={palette.textFaint}
             selectionColor={palette.crawl}
             returnKeyType="search"
@@ -166,6 +201,60 @@ export function FeedScreen() {
             <Text style={styles.searchButtonText}>Scan</Text>
           </Pressable>
         </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.controlRow}
+        >
+          {SORT_ORDER.map((mode) => (
+            <Pressable
+              key={mode}
+              style={[styles.control, sort === mode && styles.controlOn]}
+              onPress={() => setSort(mode)}
+            >
+              <Text style={[styles.controlText, sort === mode && styles.controlTextOn]}>
+                {SORT_LABELS[mode]}
+              </Text>
+            </Pressable>
+          ))}
+
+          <View style={styles.divider} />
+
+          <Pressable
+            style={[styles.control, filters.remoteOnly && styles.controlOn]}
+            onPress={() => toggle("remoteOnly")}
+          >
+            <Text
+              style={[styles.controlText, filters.remoteOnly && styles.controlTextOn]}
+            >
+              Remote
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.control, filters.withSalary && styles.controlOn]}
+            onPress={() => toggle("withSalary")}
+          >
+            <Text
+              style={[styles.controlText, filters.withSalary && styles.controlTextOn]}
+            >
+              Pay listed
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.control, filters.flaggedOnly && styles.controlFlagged]}
+            onPress={() => toggle("flaggedOnly")}
+          >
+            <Text
+              style={[
+                styles.controlText,
+                filters.flaggedOnly && styles.controlTextFlagged,
+              ]}
+            >
+              ★ Star Wars
+            </Text>
+          </Pressable>
+        </ScrollView>
       </View>
 
       {error && <Text style={styles.errorBanner}>{error}</Text>}
@@ -177,7 +266,7 @@ export function FeedScreen() {
         </View>
       ) : (
         <FlatList
-          data={jobs}
+          data={visible}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: spacing.xl }}
           refreshControl={
@@ -195,27 +284,35 @@ export function FeedScreen() {
               <Text style={styles.emptyHeadline}>
                 {failureMessage("no_results").headline}
               </Text>
-              <Text style={styles.empty}>{failureMessage("no_results").detail}</Text>
+              <Text style={styles.empty}>
+                {jobs.length > 0
+                  ? "Every posting is hidden by the filters above."
+                  : failureMessage("no_results").detail}
+              </Text>
             </View>
           }
           ListFooterComponent={
-            jobs.length === 0 ? null : loadingMore ? (
-              <View style={styles.footer}>
-                <ActivityIndicator color={palette.saberBlue} />
-                <Text style={styles.footerSub}>Scanning deeper…</Text>
-              </View>
-            ) : rateLimited ? (
-              <Pressable style={styles.footer} onPress={loadMore}>
-                <Text style={styles.footerWarn}>
-                  {failureMessage("rate_limited").headline}
+            <View>
+              {visible.length === 0 ? null : loadingMore ? (
+                <View style={styles.footer}>
+                  <ActivityIndicator color={palette.saberBlue} />
+                  <Text style={styles.footerSub}>Scanning deeper…</Text>
+                </View>
+              ) : rateLimited ? (
+                <Pressable style={styles.footer} onPress={loadMore}>
+                  <Text style={styles.footerWarn}>
+                    {failureMessage("rate_limited").headline}
+                  </Text>
+                  <Text style={styles.footerSub}>Tap to resume the scan</Text>
+                </Pressable>
+              ) : exhausted ? (
+                <Text style={styles.footerText}>
+                  — end of the scan · {visible.length} bounties —
                 </Text>
-                <Text style={styles.footerSub}>Tap to resume the scan</Text>
-              </Pressable>
-            ) : exhausted ? (
-              <Text style={styles.footerText}>
-                — end of the scan · {jobs.length} bounties —
-              </Text>
-            ) : null
+              ) : null}
+
+              <Attribution />
+            </View>
           }
           renderItem={({ item }) => (
             <View>
@@ -252,27 +349,50 @@ export function FeedScreen() {
   );
 }
 
+/**
+ * Visible credit for the boards behind the feed.
+ *
+ * Remote OK's API terms require naming them as a source and linking back, so
+ * this lives in the feed rather than a settings page nobody opens. Their
+ * logo is a registered trademark and is deliberately not used — the terms
+ * ask for the name, and only the name is what appears.
+ */
+function Attribution() {
+  const notes = requiredAttributions();
+
+  return (
+    <View style={styles.attribution}>
+      <Text style={styles.attributionLabel}>Sources</Text>
+      <View style={styles.attributionRow}>
+        {Object.values(SOURCES).map((s) => (
+          <Pressable key={s.label} onPress={() => Linking.openURL(s.homepage)}>
+            <Text style={styles.attributionLink}>{s.label} ↗</Text>
+          </Pressable>
+        ))}
+      </View>
+      {notes.map((note) => (
+        <Text key={note} style={styles.attributionNote}>
+          {note}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.void },
   scanBar: {
-    paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
     backgroundColor: "rgba(14,19,28,0.85)",
   },
-  scanLabel: {
-    ...type.label,
-    fontSize: 9,
-    color: palette.textFaint,
-    marginBottom: spacing.xs,
-  },
-  searchRow: { flexDirection: "row", gap: spacing.sm },
+  searchRow: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.md },
   searchInput: {
     ...type.body,
     flex: 1,
-    backgroundColor: palette.panelAlt,
+    backgroundColor: palette.panelAltTranslucent,
     borderWidth: 1,
     borderColor: palette.border,
     borderRadius: 3,
@@ -288,6 +408,32 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   searchButtonText: { ...type.label, fontSize: 12, color: palette.crawl },
+  controlRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+  },
+  control: {
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.panelAltTranslucent,
+    borderRadius: 3,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+  },
+  controlOn: { borderColor: palette.saberBlue, backgroundColor: "rgba(79,195,247,0.12)" },
+  controlFlagged: { borderColor: palette.crawl, backgroundColor: "rgba(255,232,31,0.12)" },
+  controlText: { ...type.label, fontSize: 9, color: palette.textDim },
+  controlTextOn: { color: palette.saberBlue },
+  controlTextFlagged: { color: palette.crawl },
+  divider: {
+    width: 1,
+    height: 18,
+    backgroundColor: palette.border,
+    marginHorizontal: spacing.xs,
+  },
   errorBanner: {
     ...type.label,
     fontSize: 10,
@@ -317,11 +463,23 @@ const styles = StyleSheet.create({
     color: palette.crawl,
     textAlign: "center",
   },
-  empty: {
+  empty: { ...type.body, textAlign: "center", color: palette.textDim, lineHeight: 22 },
+  attribution: {
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
+    marginTop: spacing.lg,
+    marginHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
+  },
+  attributionLabel: { ...type.label, fontSize: 9, color: palette.textFaint },
+  attributionRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
+  attributionLink: { ...type.body, fontSize: 10, color: palette.saberBlue },
+  attributionNote: {
     ...type.body,
-    textAlign: "center",
-    color: palette.textDim,
-    lineHeight: 22,
+    fontSize: 10,
+    color: palette.textFaint,
+    marginTop: spacing.xs,
   },
   actionRow: {
     flexDirection: "row",

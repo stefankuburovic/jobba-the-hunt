@@ -1,11 +1,27 @@
 import { Job } from "../types";
 import { fetchArbeitnowPage, RateLimitError } from "./arbeitnow";
+import { fetchGreenhouseJobs, UnknownCompanyError } from "./greenhouse";
+import { fetchHimalayasJobs, HIMALAYAS_PAGE_SIZE } from "./himalayas";
+import { fetchJobicyJobs } from "./jobicy";
+import { fetchMusePage } from "./themuse";
+import { fetchRemoteOkJobs } from "./remoteok";
 import { fetchRemotiveJobs } from "./remotive";
-import { isNetworkError, searchKeywords } from "./util";
+import { fetchWeWorkRemotelyJobs } from "./weworkremotely";
+import { isNetworkError, matchesKeywords, searchKeywords } from "./util";
 
 /** Opaque position in the feed, handed back to ask for the next batch. */
 export interface FeedCursor {
   arbeitnowPage: number;
+  musePage: number;
+  himalayasOffset: number;
+}
+
+export interface FeedRequest {
+  /** Empty means "show me everything" — no keyword filtering at all. */
+  search?: string;
+  /** Greenhouse company slugs the user is targeting (Phase 4). */
+  targets?: string[];
+  cursor?: FeedCursor | null;
 }
 
 export interface FeedResult {
@@ -13,94 +29,165 @@ export interface FeedResult {
   /** null once every source is exhausted. */
   cursor: FeedCursor | null;
   failedSources: string[];
-  /** The board asked us to slow down; the cursor is still good to retry. */
+  /** A board asked us to slow down; the cursor is still good to retry. */
   rateLimited: boolean;
   /** The device couldn't reach the network at all — not a source outage. */
   offline: boolean;
 }
 
-// How many fresh matches make a batch worth showing, and how many Arbeitnow
-// pages we'll burn chasing them. Arbeitnow filtering is client-side, so a
-// page of 100 postings can yield two hits — without the loop the list would
-// stall on an apparently-empty "load more".
-const TARGET_BATCH = 12;
-const MAX_PAGES_PER_BATCH = 3;
-// Arbeitnow is a free board that asks not to be abused, and it starts
-// answering 429 after a handful of back-to-back requests. Spacing the page
-// walk keeps a batch under two seconds while staying a polite client.
+// Unfiltered, one Arbeitnow page is already 100 postings, so a single
+// request is plenty. Filtering is what makes pages sparse — a page of 100
+// can yield one hit — so a keyword search is allowed to walk further.
+const ARBEITNOW_MAX_PAGES_BROWSING = 1;
+const ARBEITNOW_MAX_PAGES_SEARCHING = 3;
+const ARBEITNOW_SEARCH_TARGET = 10;
 const PAGE_DELAY_MS = 600;
+// A single Greenhouse board can carry 500+ roles; unfiltered, one employer
+// would drown out every board in the feed.
+const GREENHOUSE_CAP_PER_COMPANY = 60;
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function byNewest(a: Job, b: Job): number {
+  return new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime();
+}
+
+function filterJobs(jobs: Job[], keywords: string[] | null): Job[] {
+  if (!keywords) return jobs;
+  // The description is searched too: a "react" role is often titled
+  // "Software Engineer", and matching titles alone hides most of them.
+  return jobs.filter((j) =>
+    matchesKeywords(
+      `${j.title} ${j.tags.join(" ")} ${j.company} ${j.description}`,
+      keywords
+    )
+  );
+}
 
 /**
  * Fetches one batch of the merged feed.
  *
- * The two sources paginate very differently: Arbeitnow exposes real
- * `?page=N` paging, while Remotive returns its whole result set in one
- * response with no offset parameter. So Remotive is pulled once for the
- * first batch, and later batches walk Arbeitnow only.
- *
- * Jobs are sorted within a batch but batches are appended in order rather
- * than re-sorted globally — otherwise a newly loaded page would reshuffle
- * rows the user has already scrolled past.
+ * The sources disagree about paging. Arbeitnow (`?page=`), The Muse
+ * (`?page=`) and Himalayas (`?offset=`) walk; Remotive, Remote OK, Jobicy,
+ * We Work Remotely and Greenhouse hand over their whole listing at once. So
+ * the one-shot sources contribute to the first batch only, and later
+ * batches advance the three that page.
  */
-export async function fetchFeedPage(
-  search = "frontend",
-  cursor: FeedCursor | null = null
-): Promise<FeedResult> {
+export async function fetchFeedPage({
+  search = "",
+  targets = [],
+  cursor = null,
+}: FeedRequest = {}): Promise<FeedResult> {
   const isFirstBatch = cursor === null;
-  const keywords = searchKeywords(search);
+  // An empty box is a deliberate "browse everything", not a reason to fall
+  // back to a hardcoded frontend filter.
+  const keywords = search.trim() ? searchKeywords(search) : null;
+
   const failedSources: string[] = [];
   const jobs: Job[] = [];
   let offline = false;
+  let rateLimited = false;
+
+  const note = (label: string, err: unknown) => {
+    if (isNetworkError(err)) offline = true;
+    failedSources.push(label);
+  };
 
   if (isFirstBatch) {
-    try {
-      jobs.push(...(await fetchRemotiveJobs(search)));
-    } catch (err) {
-      if (isNetworkError(err)) offline = true;
-      failedSources.push("Remotive");
-    }
+    const oneShot: Array<{ label: string; run: () => Promise<Job[]> }> = [
+      { label: "Remotive", run: () => fetchRemotiveJobs(search) },
+      { label: "Remote OK", run: fetchRemoteOkJobs },
+      { label: "Jobicy", run: fetchJobicyJobs },
+      { label: "We Work Remotely", run: fetchWeWorkRemotelyJobs },
+      ...targets.map((slug) => ({
+        label: slug,
+        run: async () => {
+          const found = await fetchGreenhouseJobs(slug);
+          return filterJobs(found, keywords)
+            .sort(byNewest)
+            .slice(0, GREENHOUSE_CAP_PER_COMPANY);
+        },
+      })),
+    ];
+
+    const settled = await Promise.allSettled(oneShot.map((s) => s.run()));
+    settled.forEach((result, i) => {
+      if (result.status === "fulfilled") {
+        // Greenhouse entries filtered themselves above (they also cap), so
+        // re-filtering here is harmless and keeps boards consistent.
+        jobs.push(...filterJobs(result.value, keywords));
+      } else {
+        const err = result.reason;
+        note(
+          err instanceof UnknownCompanyError ? `${err.slug} (unknown board)` : oneShot[i].label,
+          err
+        );
+      }
+    });
   }
 
-  let page = cursor?.arbeitnowPage ?? 1;
-  let hasNext = true;
-  let arbeitnowFailed = false;
-  let rateLimited = false;
-  const before = jobs.length;
+  // ── Paging sources ────────────────────────────────────────────────────
+  let arbeitnowPage = cursor?.arbeitnowPage ?? 1;
+  let musePage = cursor?.musePage ?? 0;
+  let himalayasOffset = cursor?.himalayasOffset ?? 0;
+  let arbeitnowHasNext = true;
+  let museHasNext = true;
+  let himalayasHasNext = true;
 
-  for (let i = 0; i < MAX_PAGES_PER_BATCH; i++) {
+  const arbeitnowMaxPages = keywords
+    ? ARBEITNOW_MAX_PAGES_SEARCHING
+    : ARBEITNOW_MAX_PAGES_BROWSING;
+  let arbeitnowFound = 0;
+
+  for (let i = 0; i < arbeitnowMaxPages; i++) {
     if (i > 0) await delay(PAGE_DELAY_MS);
-
     try {
-      const result = await fetchArbeitnowPage(page, keywords);
-      jobs.push(...result.jobs);
-      hasNext = result.hasNext;
-      page += 1;
-      if (!hasNext || jobs.length - before >= TARGET_BATCH) break;
+      const page = await fetchArbeitnowPage(arbeitnowPage, keywords);
+      jobs.push(...page.jobs);
+      arbeitnowFound += page.jobs.length;
+      arbeitnowHasNext = page.hasNext;
+      arbeitnowPage += 1;
+      if (!arbeitnowHasNext || arbeitnowFound >= ARBEITNOW_SEARCH_TARGET) break;
     } catch (err) {
       if (err instanceof RateLimitError) {
-        // Keep `hasNext` true and don't advance the page: the cursor stays
-        // valid so the next scroll resumes exactly where we stopped.
+        // Hold the page number: the cursor stays valid so the next scroll
+        // resumes exactly where we stopped.
         rateLimited = true;
       } else {
-        if (isNetworkError(err)) offline = true;
-        arbeitnowFailed = true;
-        hasNext = false;
+        note("Arbeitnow", err);
+        arbeitnowHasNext = false;
       }
       break;
     }
   }
 
-  if (arbeitnowFailed) failedSources.push("Arbeitnow");
+  try {
+    const page = await fetchMusePage(musePage);
+    jobs.push(...filterJobs(page.jobs, keywords));
+    museHasNext = page.hasNext;
+    musePage += 1;
+  } catch (err) {
+    note("The Muse", err);
+    museHasNext = false;
+  }
 
-  jobs.sort(
-    (a, b) => new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime()
-  );
+  try {
+    const found = await fetchHimalayasJobs(himalayasOffset);
+    jobs.push(...filterJobs(found, keywords));
+    himalayasHasNext = found.length === HIMALAYAS_PAGE_SIZE;
+    himalayasOffset += HIMALAYAS_PAGE_SIZE;
+  } catch (err) {
+    note("Himalayas", err);
+    himalayasHasNext = false;
+  }
+
+  jobs.sort(byNewest);
+
+  const hasNext = arbeitnowHasNext || museHasNext || himalayasHasNext;
 
   return {
     jobs,
-    cursor: hasNext ? { arbeitnowPage: page } : null,
+    cursor: hasNext ? { arbeitnowPage, musePage, himalayasOffset } : null,
     failedSources,
     rateLimited,
     offline,

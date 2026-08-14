@@ -1,4 +1,19 @@
-export type JobSource = "remotive" | "arbeitnow";
+/** Boards that publish an open listing of everything they have. */
+export type AggregatorSource =
+  | "remotive"
+  | "arbeitnow"
+  | "remoteok"
+  | "jobicy"
+  | "themuse"
+  | "himalayas"
+  | "weworkremotely";
+
+/**
+ * Greenhouse is per-employer rather than a board, so its source carries the
+ * company slug — `greenhouse:stripe` — which also keeps job ids unique
+ * across employers.
+ */
+export type JobSource = AggregatorSource | `greenhouse:${string}`;
 
 export interface Job {
   id: string; // `${source}:${externalId}` — stable, dedupe-safe key
@@ -11,7 +26,12 @@ export interface Job {
   remote: boolean;
   location?: string;
   postedDate: string; // ISO 8601
-  salary?: string;
+  salary?: string; // human-readable, when that's all the source gives
+  // Numeric pay, when the source publishes it — needed to sort by salary,
+  // which a free-text range can't support.
+  salaryMin?: number;
+  salaryMax?: number;
+  salaryCurrency?: string;
 }
 
 export type ApplicationStatus =

@@ -11,7 +11,9 @@ import {
   ApplicationsProvider,
   useApplications,
 } from "./src/context/ApplicationsContext";
+import { TargetsProvider } from "./src/context/TargetsContext";
 import { FeedScreen } from "./src/screens/FeedScreen";
+import { TargetsScreen } from "./src/screens/TargetsScreen";
 import { TrackerScreen } from "./src/screens/TrackerScreen";
 import { palette, type } from "./src/theme";
 
@@ -55,9 +57,11 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ApplicationsProvider>
-        <StarfieldProvider>
-          <Root />
-        </StarfieldProvider>
+        <TargetsProvider>
+          <StarfieldProvider>
+            <Root />
+          </StarfieldProvider>
+        </TargetsProvider>
       </ApplicationsProvider>
     </SafeAreaProvider>
   );

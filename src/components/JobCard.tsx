@@ -1,5 +1,7 @@
 import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { sourceLabel } from "../api/sources";
+import { salaryLabel } from "../sorting";
 import { findStarWarsReference, referenceBadge } from "../starwars";
 import { Job } from "../types";
 import { holoPanel, palette, spacing, type } from "../theme";
@@ -18,6 +20,7 @@ function timeAgo(iso: string): string {
  * sells it as a projected hologram rather than a flat card.
  */
 export function JobCard({ job }: { job: Job }) {
+  const pay = salaryLabel(job);
   const reference = useMemo(
     () => findStarWarsReference(job.title, job.description),
     [job.title, job.description]
@@ -39,7 +42,7 @@ export function JobCard({ job }: { job: Job }) {
           {job.title}
         </Text>
         <View style={styles.sourceBadge}>
-          <Text style={styles.sourceBadgeText}>{job.source}</Text>
+          <Text style={styles.sourceBadgeText}>{sourceLabel(job.source)}</Text>
         </View>
       </View>
 
@@ -47,8 +50,9 @@ export function JobCard({ job }: { job: Job }) {
 
       <Text style={styles.meta}>
         {(job.location ?? "Deep space / remote").toUpperCase()} · {timeAgo(job.postedDate)}
-        {job.salary ? ` · ${job.salary}` : ""}
       </Text>
+
+      {pay && <Text style={styles.pay}>{pay}</Text>}
 
       {job.tags.length > 0 && (
         <View style={styles.tagRow}>
@@ -91,6 +95,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   refBadge: { ...type.label, fontSize: 9, color: palette.crawl },
+  pay: { ...type.label, fontSize: 11, color: palette.saberGreen, marginTop: spacing.xs },
   refNote: { ...type.body, fontSize: 9, color: palette.textFaint },
   // The projector beam along the top of the panel.
   topEdge: {

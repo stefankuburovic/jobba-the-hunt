@@ -47,7 +47,8 @@ export interface ArbeitnowPage {
  */
 export async function fetchArbeitnowPage(
   page = 1,
-  keywords?: string[]
+  /** null means no keyword filtering at all — show the whole page. */
+  keywords: string[] | null = null
 ): Promise<ArbeitnowPage> {
   const res = await fetch(`${BASE_URL}?page=${page}`);
 
@@ -62,9 +63,11 @@ export async function fetchArbeitnowPage(
   const data: ArbeitnowResponse = await res.json();
   const postings = data.data ?? [];
 
-  const filtered = postings.filter((j) =>
-    matchesKeywords(`${j.title} ${j.tags.join(" ")}`, keywords)
-  );
+  const filtered = keywords
+    ? postings.filter((j) =>
+        matchesKeywords(`${j.title} ${j.tags.join(" ")} ${j.description}`, keywords)
+      )
+    : postings;
 
   return {
     jobs: filtered.map((j) => ({
