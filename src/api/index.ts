@@ -1,5 +1,6 @@
 import { Job } from "../types";
 import { fetchArbeitnowPage, RateLimitError } from "./arbeitnow";
+import { withoutExcludedIndustries } from "./excluded";
 import { fetchGreenhouseJobs, UnknownCompanyError } from "./greenhouse";
 import { fetchHimalayasJobs, HIMALAYAS_PAGE_SIZE } from "./himalayas";
 import { fetchJobicyJobs } from "./jobicy";
@@ -53,6 +54,7 @@ function byNewest(a: Job, b: Job): number {
 }
 
 function filterJobs(jobs: Job[], keywords: string[] | null): Job[] {
+  jobs = withoutExcludedIndustries(jobs);
   if (!keywords) return jobs;
   // The description is searched too: a "react" role is often titled
   // "Software Engineer", and matching titles alone hides most of them.
@@ -143,8 +145,9 @@ export async function fetchFeedPage({
     if (i > 0) await delay(PAGE_DELAY_MS);
     try {
       const page = await fetchArbeitnowPage(arbeitnowPage, keywords);
-      jobs.push(...page.jobs);
-      arbeitnowFound += page.jobs.length;
+      const kept = withoutExcludedIndustries(page.jobs);
+      jobs.push(...kept);
+      arbeitnowFound += kept.length;
       arbeitnowHasNext = page.hasNext;
       arbeitnowPage += 1;
       if (!arbeitnowHasNext || arbeitnowFound >= ARBEITNOW_SEARCH_TARGET) break;
