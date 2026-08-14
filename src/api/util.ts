@@ -64,3 +64,20 @@ export function matchesKeywords(
   const lower = haystack.toLowerCase();
   return keywords.some((k) => lower.includes(k.toLowerCase()));
 }
+
+/**
+ * Turns the search box into the keyword list used for client-side filtering.
+ *
+ * Remotive applies `search` server-side, but Arbeitnow has no search
+ * parameter — so without this the two sources answered different questions:
+ * typing "python" returned Python roles from Remotive and React roles from
+ * Arbeitnow. An empty box falls back to the frontend defaults.
+ */
+export function searchKeywords(search: string): string[] {
+  const terms = search
+    .split(/[,\s]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2);
+
+  return terms.length > 0 ? terms : DEFAULT_KEYWORDS;
+}

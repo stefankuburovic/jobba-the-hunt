@@ -13,6 +13,11 @@ interface ApplicationsContextValue {
   loading: boolean;
   saveJob: (job: Job) => Promise<void>;
   setStatus: (jobId: string, status: ApplicationStatus) => Promise<void>;
+  setInterview: (
+    jobId: string,
+    interviewDate: string | undefined,
+    calendarEventId: string | undefined
+  ) => Promise<void>;
   setNotes: (jobId: string, notes: string) => Promise<void>;
   removeJob: (jobId: string) => Promise<void>;
   isSaved: (jobId: string) => boolean;
@@ -46,6 +51,18 @@ export function ApplicationsProvider({ children }: { children: React.ReactNode }
     setApplications(map);
   }, []);
 
+  const setInterview = useCallback(
+    async (
+      jobId: string,
+      interviewDate: string | undefined,
+      calendarEventId: string | undefined
+    ) => {
+      const map = await store.setInterview(jobId, interviewDate, calendarEventId);
+      setApplications(map);
+    },
+    []
+  );
+
   const setNotes = useCallback(async (jobId: string, notes: string) => {
     const map = await store.setNotes(jobId, notes);
     setApplications(map);
@@ -63,7 +80,16 @@ export function ApplicationsProvider({ children }: { children: React.ReactNode }
 
   return (
     <ApplicationsContext.Provider
-      value={{ applications, loading, saveJob, setStatus, setNotes, removeJob, isSaved }}
+      value={{
+        applications,
+        loading,
+        saveJob,
+        setStatus,
+        setInterview,
+        setNotes,
+        removeJob,
+        isSaved,
+      }}
     >
       {children}
     </ApplicationsContext.Provider>

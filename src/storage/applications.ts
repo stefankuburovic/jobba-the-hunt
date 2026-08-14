@@ -55,6 +55,20 @@ export async function setStatus(
   return map;
 }
 
+export async function setInterview(
+  jobId: string,
+  interviewDate: string | undefined,
+  calendarEventId: string | undefined
+): Promise<ApplicationsMap> {
+  const map = await loadApplications();
+  const existing = map[jobId];
+  if (!existing) return map;
+
+  map[jobId] = { ...existing, interviewDate, calendarEventId };
+  await persist(map);
+  return map;
+}
+
 export async function setNotes(jobId: string, notes: string): Promise<ApplicationsMap> {
   const map = await loadApplications();
   if (!map[jobId]) return map;

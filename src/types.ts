@@ -70,6 +70,8 @@ export interface Application {
   status: ApplicationStatus;
   savedDate: string; // ISO
   appliedDate?: string; // ISO
-  interviewDate?: string; // ISO — feeds the calendar step (Phase 3)
+  interviewDate?: string; // ISO — the scheduled audience
+  /** Device calendar event created for `interviewDate`, when sync succeeded. */
+  calendarEventId?: string;
   notes?: string;
 }

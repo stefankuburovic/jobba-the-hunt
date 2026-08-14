@@ -8,6 +8,11 @@ import {
   Text,
   View,
 } from "react-native";
+import {
+  addInterviewEvent,
+  removeInterviewEvent,
+} from "../calendar/interviewCalendar";
+import { InterviewScheduler } from "../components/InterviewScheduler";
 import { JobCard } from "../components/JobCard";
 import { Starfield } from "../components/Starfield";
 import { useApplications } from "../context/ApplicationsContext";
@@ -24,8 +29,9 @@ import {
 const FILTERS: Array<ApplicationStatus | "all"> = ["all", ...STATUS_ORDER];
 
 export function TrackerScreen() {
-  const { applications, setStatus, removeJob } = useApplications();
+  const { applications, setStatus, setInterview, removeJob } = useApplications();
   const [filter, setFilter] = useState<ApplicationStatus | "all">("all");
+  const [scheduling, setScheduling] = useState<Application | null>(null);
 
   const list = useMemo(() => {
     const all = Object.values(applications).sort(
@@ -40,6 +46,51 @@ export function TrackerScreen() {
     for (const app of Object.values(applications)) c[app.status] = (c[app.status] ?? 0) + 1;
     return c;
   }, [applications]);
+
+  // Choosing "Audience" is what triggers scheduling; every other status just
+  // sets the status. Moving *away* from it clears the date and takes the
+  // calendar event with it, so a cancelled interview doesn't leave a ghost
+  // reminder on the device.
+  const onStatusPress = async (app: Application, status: ApplicationStatus) => {
+    if (status === "interview") {
+      setScheduling(app);
+      return;
+    }
+
+    if (app.status === "interview" && app.interviewDate) {
+      if (app.calendarEventId) await removeInterviewEvent(app.calendarEventId);
+      await setInterview(app.jobId, undefined, undefined);
+    }
+    await setStatus(app.jobId, status);
+  };
+
+  const onConfirmSchedule = async (app: Application, date: Date) => {
+    setScheduling(null);
+
+    // Replace any previously synced event rather than stacking duplicates.
+    if (app.calendarEventId) await removeInterviewEvent(app.calendarEventId);
+
+    const result = await addInterviewEvent({
+      title: `Interview — ${app.job.title} @ ${app.job.company}`,
+      start: date,
+      notes: `Jobba the Hunt\n${app.job.company} · ${app.job.title}\n${app.job.url}`,
+      url: app.job.url,
+    });
+
+    await setInterview(
+      app.jobId,
+      date.toISOString(),
+      result.ok ? result.eventId : undefined
+    );
+    await setStatus(app.jobId, "interview");
+
+    Alert.alert(
+      result.ok ? "Audience locked in" : "Saved to tracker only",
+      result.ok
+        ? `Added to your calendar with reminders a day and an hour before.`
+        : result.message
+    );
+  };
 
   const confirmRemove = (app: Application) => {
     Alert.alert("Jettison this bounty?", app.job.title, [
@@ -106,7 +157,7 @@ export function TrackerScreen() {
                       styles.statusPill,
                       active && { borderColor: accent, backgroundColor: `${accent}1A` },
                     ]}
-                    onPress={() => setStatus(item.jobId, status)}
+                    onPress={() => onStatusPress(item, status)}
                   >
                     <Text style={[styles.statusPillText, active && { color: accent }]}>
                       {STATUS_LABELS[status]}
@@ -115,6 +166,17 @@ export function TrackerScreen() {
                 );
               })}
             </View>
+
+            {item.interviewDate && (
+              <Pressable style={styles.interviewRow} onPress={() => setScheduling(item)}>
+                <Text style={styles.interviewText}>
+                  {formatInterview(item.interviewDate)}
+                </Text>
+                <Text style={styles.interviewSync}>
+                  {item.calendarEventId ? "· in calendar" : "· tracker only"}
+                </Text>
+              </Pressable>
+            )}
 
             <View style={styles.linkRow}>
               <Pressable onPress={() => Linking.openURL(item.job.url)}>
@@ -127,8 +189,30 @@ export function TrackerScreen() {
           </View>
         )}
       />
+
+      {scheduling && (
+        <InterviewScheduler
+          visible
+          jobTitle={`${scheduling.job.title} @ ${scheduling.job.company}`}
+          initialDate={scheduling.interviewDate}
+          onCancel={() => setScheduling(null)}
+          onConfirm={(date) => onConfirmSchedule(scheduling, date)}
+        />
+      )}
     </View>
   );
+}
+
+function formatInterview(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "Date unreadable";
+  return d.toLocaleString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 const styles = StyleSheet.create({
@@ -180,6 +264,18 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   statusPillText: { ...type.label, fontSize: 9, color: palette.textDim },
+  interviewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
+    borderLeftWidth: 2,
+    borderLeftColor: palette.saberPurple,
+    paddingLeft: spacing.sm,
+  },
+  interviewText: { ...type.label, fontSize: 10, color: palette.saberPurple },
+  interviewSync: { ...type.body, fontSize: 10, color: palette.textFaint },
   linkRow: {
     flexDirection: "row",
     justifyContent: "space-between",
