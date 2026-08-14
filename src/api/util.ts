@@ -66,6 +66,20 @@ export function matchesKeywords(
 }
 
 /**
+ * Tells "the phone has no connection" apart from "this board is broken".
+ *
+ * React Native rejects `fetch` with a TypeError whose message is
+ * "Network request failed"; the exact wording differs across engines, so
+ * this matches loosely rather than on one string.
+ */
+export function isNetworkError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return /network request failed|network error|failed to fetch|econnrefused|enotfound|timeout/i.test(
+    err.message
+  );
+}
+
+/**
  * Turns the search box into the keyword list used for client-side filtering.
  *
  * Remotive applies `search` server-side, but Arbeitnow has no search

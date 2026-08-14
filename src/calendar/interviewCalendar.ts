@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import { FailureKind } from "../messages";
 
 type CalendarModule = typeof import("expo-calendar");
 
@@ -25,25 +26,16 @@ function loadCalendar(): CalendarModule | null {
   return cached;
 }
 
-export type CalendarFailure =
-  | "unavailable" // Expo Go, web, or simulator without calendar support
-  | "denied" // user said no to the permission prompt
-  | "no-writable-calendar"
-  | "error";
-
+/** Every failure path maps onto the shared message catalog. */
 export type CalendarResult =
   | { ok: true; eventId: string }
-  | { ok: false; reason: CalendarFailure; message: string };
+  | { ok: false; reason: FailureKind };
 
 export function isCalendarSupported(): boolean {
   return (
     (Platform.OS === "ios" || Platform.OS === "android") && loadCalendar() !== null
   );
 }
-
-export const CALENDAR_UNAVAILABLE_HINT =
-  "Calendar sync needs a development build — expo-calendar isn't part of Expo Go. " +
-  "The interview date is still saved in the tracker.";
 
 /**
  * Creates a device calendar event for an interview.
@@ -60,17 +52,13 @@ export async function addInterviewEvent(params: {
 }): Promise<CalendarResult> {
   const Calendar = loadCalendar();
   if (!Calendar || !isCalendarSupported()) {
-    return { ok: false, reason: "unavailable", message: CALENDAR_UNAVAILABLE_HINT };
+    return { ok: false, reason: "calendar_unavailable" };
   }
 
   try {
     const { status } = await Calendar.requestCalendarPermissions();
     if (status !== "granted") {
-      return {
-        ok: false,
-        reason: "denied",
-        message: "Calendar permission denied — the date is still saved in the tracker.",
-      };
+      return { ok: false, reason: "calendar_denied" };
     }
 
     const calendars = await Calendar.getCalendars(Calendar.EntityTypes.EVENT);
@@ -78,11 +66,7 @@ export async function addInterviewEvent(params: {
     const target = writable.find((c) => c.isPrimary) ?? writable[0];
 
     if (!target) {
-      return {
-        ok: false,
-        reason: "no-writable-calendar",
-        message: "No writable calendar on this device.",
-      };
+      return { ok: false, reason: "calendar_no_writable" };
     }
 
     const end = new Date(params.start.getTime() + DEFAULT_DURATION_MIN * 60_000);
@@ -103,14 +87,10 @@ export async function addInterviewEvent(params: {
     // reaches for the native side. Report that as "unavailable" so the user
     // gets the dev-build hint instead of a raw native error string.
     if (/native module|not available|doesn't exist|ExpoCalendar/i.test(detail)) {
-      return { ok: false, reason: "unavailable", message: CALENDAR_UNAVAILABLE_HINT };
+      return { ok: false, reason: "calendar_unavailable" };
     }
 
-    return {
-      ok: false,
-      reason: "error",
-      message: detail || "Couldn't reach the calendar.",
-    };
+    return { ok: false, reason: "calendar_error" };
   }
 }
 

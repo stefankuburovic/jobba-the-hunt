@@ -15,6 +15,7 @@ import { FeedCursor, fetchFeedPage } from "../api";
 import { JobCard } from "../components/JobCard";
 import { Starfield } from "../components/Starfield";
 import { useApplications } from "../context/ApplicationsContext";
+import { failureLine, failureMessage } from "../messages";
 import { palette, spacing, type } from "../theme";
 import { Job } from "../types";
 
@@ -60,10 +61,17 @@ export function FeedScreen() {
 
       setJobs((prev) => (mode === "reset" ? fresh : [...prev, ...fresh]));
 
+      // Offline outranks a source outage: if the phone has no signal, naming
+      // the boards that "failed" would blame the wrong thing.
       setError(
-        result.failedSources.length > 0
-          ? `Lost contact with ${result.failedSources.join(", ")} — showing the rest`
-          : null
+        result.offline
+          ? failureLine("offline")
+          : result.failedSources.length > 0
+            ? failureLine(
+                "source_down",
+                `${result.failedSources.join(", ")} went quiet. Showing the rest.`
+              )
+            : null
       );
     } finally {
       inFlight.current = false;
@@ -118,7 +126,8 @@ export function FeedScreen() {
       if (can) {
         Linking.openURL(job.url);
       } else {
-        Alert.alert("Comms down", `Couldn't open the posting:\n${job.url}`);
+        const { headline, detail } = failureMessage("link_failed");
+        Alert.alert(headline, `${detail}\n\n${job.url}`);
       }
     },
     [saveJob]
@@ -170,21 +179,25 @@ export function FeedScreen() {
           onEndReached={onEndReached}
           onEndReachedThreshold={0.6}
           ListEmptyComponent={
-            <Text style={styles.empty}>
-              These aren't the jobs you're looking for.{"\n"}Try a different scan term.
-            </Text>
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyHeadline}>
+                {failureMessage("no_results").headline}
+              </Text>
+              <Text style={styles.empty}>{failureMessage("no_results").detail}</Text>
+            </View>
           }
           ListFooterComponent={
             jobs.length === 0 ? null : loadingMore ? (
               <View style={styles.footer}>
                 <ActivityIndicator color={palette.saberBlue} />
-                <Text style={styles.footerText}>Scanning deeper…</Text>
+                <Text style={styles.footerSub}>Scanning deeper…</Text>
               </View>
             ) : rateLimited ? (
               <Pressable style={styles.footer} onPress={loadMore}>
                 <Text style={styles.footerWarn}>
-                  The board is throttling us — tap to resume the scan
+                  {failureMessage("rate_limited").headline}
                 </Text>
+                <Text style={styles.footerSub}>Tap to resume the scan</Text>
               </Pressable>
             ) : exhausted ? (
               <Text style={styles.footerText}>
@@ -277,6 +290,7 @@ const styles = StyleSheet.create({
   loadingText: { ...type.label, fontSize: 11, color: palette.textDim },
   footer: { paddingVertical: spacing.lg, alignItems: "center", gap: spacing.sm },
   footerWarn: { ...type.label, fontSize: 10, color: palette.crawl, textAlign: "center" },
+  footerSub: { ...type.body, fontSize: 10, color: palette.textFaint, textAlign: "center" },
   footerText: {
     ...type.label,
     fontSize: 9,
@@ -284,12 +298,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingVertical: spacing.lg,
   },
+  emptyBox: { marginTop: 60, paddingHorizontal: spacing.xl, gap: spacing.sm },
+  emptyHeadline: {
+    ...type.display,
+    fontSize: 14,
+    color: palette.crawl,
+    textAlign: "center",
+  },
   empty: {
     ...type.body,
     textAlign: "center",
     color: palette.textDim,
-    marginTop: 60,
-    paddingHorizontal: spacing.xl,
     lineHeight: 22,
   },
   actionRow: {

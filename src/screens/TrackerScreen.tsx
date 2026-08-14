@@ -16,6 +16,7 @@ import { InterviewScheduler } from "../components/InterviewScheduler";
 import { JobCard } from "../components/JobCard";
 import { Starfield } from "../components/Starfield";
 import { useApplications } from "../context/ApplicationsContext";
+import { failureMessage } from "../messages";
 import { palette, spacing, type } from "../theme";
 import {
   Application,
@@ -84,12 +85,15 @@ export function TrackerScreen() {
     );
     await setStatus(app.jobId, "interview");
 
-    Alert.alert(
-      result.ok ? "Audience locked in" : "Saved to tracker only",
-      result.ok
-        ? `Added to your calendar with reminders a day and an hour before.`
-        : result.message
-    );
+    if (result.ok) {
+      Alert.alert(
+        "Audience locked in",
+        "Added to your calendar with reminders a day and an hour before."
+      );
+    } else {
+      const { headline, detail } = failureMessage(result.reason);
+      Alert.alert(headline, detail);
+    }
   };
 
   const confirmRemove = (app: Application) => {

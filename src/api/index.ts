@@ -1,7 +1,7 @@
 import { Job } from "../types";
 import { fetchArbeitnowPage, RateLimitError } from "./arbeitnow";
 import { fetchRemotiveJobs } from "./remotive";
-import { searchKeywords } from "./util";
+import { isNetworkError, searchKeywords } from "./util";
 
 /** Opaque position in the feed, handed back to ask for the next batch. */
 export interface FeedCursor {
@@ -15,6 +15,8 @@ export interface FeedResult {
   failedSources: string[];
   /** The board asked us to slow down; the cursor is still good to retry. */
   rateLimited: boolean;
+  /** The device couldn't reach the network at all — not a source outage. */
+  offline: boolean;
 }
 
 // How many fresh matches make a batch worth showing, and how many Arbeitnow
@@ -50,11 +52,13 @@ export async function fetchFeedPage(
   const keywords = searchKeywords(search);
   const failedSources: string[] = [];
   const jobs: Job[] = [];
+  let offline = false;
 
   if (isFirstBatch) {
     try {
       jobs.push(...(await fetchRemotiveJobs(search)));
-    } catch {
+    } catch (err) {
+      if (isNetworkError(err)) offline = true;
       failedSources.push("Remotive");
     }
   }
@@ -80,6 +84,7 @@ export async function fetchFeedPage(
         // valid so the next scroll resumes exactly where we stopped.
         rateLimited = true;
       } else {
+        if (isNetworkError(err)) offline = true;
         arbeitnowFailed = true;
         hasNext = false;
       }
@@ -98,5 +103,6 @@ export async function fetchFeedPage(
     cursor: hasNext ? { arbeitnowPage: page } : null,
     failedSources,
     rateLimited,
+    offline,
   };
 }
