@@ -1,4 +1,4 @@
-import { Profile } from "./context/ProfileContext";
+import { Profile } from "./profile";
 import { Job } from "./types";
 
 /**

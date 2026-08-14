@@ -1,6 +1,9 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
+    "strict": true,
+    // Jest's globals aren't imported in the test files, so the types have to
+    // be pulled in explicitly for `tsc --noEmit` to check them.
+    "types": ["jest"]
   }
 }

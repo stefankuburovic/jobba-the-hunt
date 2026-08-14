@@ -5,6 +5,7 @@ import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { ErrorBoundary } from "./src/components/ErrorBoundary";
 import { OpeningCrawl } from "./src/components/OpeningCrawl";
 import { StarfieldProvider } from "./src/components/StarfieldProvider";
 import {
@@ -58,15 +59,18 @@ function TabGlyph({ glyph, color }: { glyph: string; color: string }) {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <ApplicationsProvider>
-        <ProfileProvider>
-          <TargetsProvider>
-            <StarfieldProvider>
-              <Root />
-            </StarfieldProvider>
-          </TargetsProvider>
-        </ProfileProvider>
-      </ApplicationsProvider>
+      {/* Outside the providers so a crash while hydrating storage is caught too. */}
+      <ErrorBoundary>
+        <ApplicationsProvider>
+          <ProfileProvider>
+            <TargetsProvider>
+              <StarfieldProvider>
+                <Root />
+              </StarfieldProvider>
+            </TargetsProvider>
+          </ProfileProvider>
+        </ApplicationsProvider>
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }

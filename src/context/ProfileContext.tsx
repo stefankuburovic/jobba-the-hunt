@@ -7,28 +7,13 @@ import React, {
   useState,
 } from "react";
 
+import { EMPTY_PROFILE, Profile, profileIsUsable } from "../profile";
+
 const STORAGE_KEY = "jobba:profile";
 
-export interface Profile {
-  name: string;
-  /** "Frontend engineer", "Angular developer" — how you introduce yourself. */
-  headline: string;
-  yearsExperience: string;
-  /** Comma-separated; matched against a posting to pick what to mention. */
-  skills: string;
-  /** One or two concrete things you've shipped. The part that isn't generic. */
-  highlights: string;
-  city: string;
-}
-
-export const EMPTY_PROFILE: Profile = {
-  name: "",
-  headline: "",
-  yearsExperience: "",
-  skills: "",
-  highlights: "",
-  city: "",
-};
+// Re-exported so screens can keep importing profile bits from one place.
+export { EMPTY_PROFILE, profileIsUsable };
+export type { Profile };
 
 interface ProfileContextValue {
   profile: Profile;
@@ -39,10 +24,6 @@ interface ProfileContextValue {
 }
 
 const ProfileContext = createContext<ProfileContextValue | undefined>(undefined);
-
-export function profileIsUsable(profile: Profile): boolean {
-  return Boolean(profile.name.trim() && profile.headline.trim());
-}
 
 export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);

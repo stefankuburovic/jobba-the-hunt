@@ -23,6 +23,12 @@ import { useApplications } from "../context/ApplicationsContext";
 import { useTargets } from "../context/TargetsContext";
 import { failureLine, failureMessage } from "../messages";
 import { cacheAge, loadFeedCache, saveFeedCache } from "../storage/feedCache";
+import {
+  DEFAULT_PREFERENCES,
+  loadPreferences,
+  savePreferences,
+} from "../storage/preferences";
+import { dedupePostings } from "../dedupe";
 import { findStarWarsReference } from "../starwars";
 import {
   applyFilters,
@@ -44,15 +50,18 @@ export function FeedScreen() {
   // Starts empty on purpose: the feed opens on everything the boards have,
   // and a keyword narrows it only when you actually type one.
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SortMode>("newest");
-  const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FILTERS);
+  const [sort, setSort] = useState<SortMode>(DEFAULT_PREFERENCES.sort);
+  const [filters, setFilters] = useState<FeedFilters>(DEFAULT_PREFERENCES.filters);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [exhausted, setExhausted] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sources, setSources] = useState<SourceFilter[]>(ALL_SOURCE_FILTERS);
+  const [sources, setSources] = useState<SourceFilter[]>(DEFAULT_PREFERENCES.sources);
+  // Preferences load asynchronously; saving before they arrive would write
+  // the defaults straight over what the user last chose.
+  const prefsLoaded = useRef(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   // Set while a cached scan is on screen and a fresh one runs behind it.
   const [restoredFrom, setRestoredFrom] = useState<string | null>(null);
@@ -65,6 +74,9 @@ export function FeedScreen() {
 
   const cursor = useRef<FeedCursor | null>(null);
   const seenIds = useRef(new Set<string>());
+  // Content keys, so a posting a board lists twice under different slugs
+  // only occupies one row.
+  const seenPostings = useRef(new Set<string>());
   const inFlight = useRef(false);
 
   const load = useCallback(
@@ -76,6 +88,7 @@ export function FeedScreen() {
         if (mode === "reset") {
           cursor.current = null;
           seenIds.current = new Set();
+          seenPostings.current = new Set();
           setExhausted(false);
           setError(null);
         }
@@ -91,9 +104,11 @@ export function FeedScreen() {
         setExhausted(result.cursor === null);
         setRateLimited(result.rateLimited);
 
-        // Eight sources overlap heavily, so dedupe against everything on screen.
-        const fresh = result.jobs.filter((j) => !seenIds.current.has(j.id));
-        for (const j of fresh) seenIds.current.add(j.id);
+        // Two passes: the id catches the same row fetched twice, the content
+        // key catches the same role listed twice under different ids.
+        const unseen = result.jobs.filter((j) => !seenIds.current.has(j.id));
+        for (const j of unseen) seenIds.current.add(j.id);
+        const fresh = dedupePostings(unseen, seenPostings.current);
 
         setJobs((prev) => (mode === "reset" ? fresh : [...prev, ...fresh]));
 
@@ -132,6 +147,20 @@ export function FeedScreen() {
     let cancelled = false;
 
     const run = async () => {
+      if (!prefsLoaded.current) {
+        const prefs = await loadPreferences();
+        if (cancelled) return;
+        prefsLoaded.current = true;
+        setSort(prefs.sort);
+        setFilters(prefs.filters);
+        // Setting sources re-triggers this effect, so the scan below runs
+        // with the restored selection rather than the default one.
+        if (prefs.sources.join() !== sources.join()) {
+          setSources(prefs.sources);
+          return;
+        }
+      }
+
       const cached = hydrated.current ? null : await loadFeedCache();
       hydrated.current = true;
       if (cancelled) return;
@@ -139,6 +168,7 @@ export function FeedScreen() {
       if (cached) {
         setJobs(cached.jobs);
         for (const j of cached.jobs) seenIds.current.add(j.id);
+        dedupePostings(cached.jobs, seenPostings.current);
         setRestoredFrom(cacheAge(cached.savedAt));
         setLoading(false);
         setRescanning(true);
@@ -164,6 +194,11 @@ export function FeedScreen() {
     // not on every keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targets, sources]);
+
+  useEffect(() => {
+    if (!prefsLoaded.current) return;
+    savePreferences({ sort, filters, sources });
+  }, [sort, filters, sources]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
