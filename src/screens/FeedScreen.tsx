@@ -22,6 +22,7 @@ import { useStarfield } from "../components/StarfieldProvider";
 import { useApplications } from "../context/ApplicationsContext";
 import { useTargets } from "../context/TargetsContext";
 import { failureLine, failureMessage } from "../messages";
+import { cacheAge, loadFeedCache, saveFeedCache } from "../storage/feedCache";
 import { findStarWarsReference } from "../starwars";
 import {
   applyFilters,
@@ -53,6 +54,9 @@ export function FeedScreen() {
   const [error, setError] = useState<string | null>(null);
   const [sources, setSources] = useState<SourceFilter[]>(ALL_SOURCE_FILTERS);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Set while a cached scan is on screen and a fresh one runs behind it.
+  const [restoredFrom, setRestoredFrom] = useState<string | null>(null);
+  const [rescanning, setRescanning] = useState(false);
 
   const { saveJob, isSaved } = useApplications();
   const { targets } = useTargets();
@@ -93,6 +97,13 @@ export function FeedScreen() {
 
         setJobs((prev) => (mode === "reset" ? fresh : [...prev, ...fresh]));
 
+        // Only the opening batch is cached: it's what the next launch shows
+        // before anything has been fetched.
+        if (mode === "reset" && fresh.length > 0) {
+          setRestoredFrom(null);
+          saveFeedCache(fresh);
+        }
+
         // Offline outranks a source outage: if the phone has no signal,
         // naming the boards that "failed" would blame the wrong thing.
         setError(
@@ -112,13 +123,42 @@ export function FeedScreen() {
     [targets, sources, scan]
   );
 
+  // First paint comes from the cache when there is one: eight boards take
+  // ~1.6s, and staring at a spinner every launch for a list that barely
+  // changed is the wrong trade. The fresh scan then replaces it in place.
+  const hydrated = useRef(false);
+
   useEffect(() => {
-    setLoading(true);
-    scan.clear();
-    load(search, "reset").finally(() => {
-      setLoading(false);
+    let cancelled = false;
+
+    const run = async () => {
+      const cached = hydrated.current ? null : await loadFeedCache();
+      hydrated.current = true;
+      if (cancelled) return;
+
+      if (cached) {
+        setJobs(cached.jobs);
+        for (const j of cached.jobs) seenIds.current.add(j.id);
+        setRestoredFrom(cacheAge(cached.savedAt));
+        setLoading(false);
+        setRescanning(true);
+      } else {
+        setLoading(true);
+      }
+
       scan.clear();
-    });
+      await load(search, "reset");
+      if (cancelled) return;
+
+      setLoading(false);
+      setRescanning(false);
+      scan.clear();
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
     // Re-runs when the watched employers or the enabled sources change, since
     // both change which boards get contacted. Search is applied on submit,
     // not on every keystroke.
@@ -285,6 +325,14 @@ export function FeedScreen() {
           </Pressable>
         </ScrollView>
       </View>
+
+      {restoredFrom && (
+        <Text style={styles.cacheBanner}>
+          {rescanning
+            ? `Last scan from ${restoredFrom} · re-sweeping…`
+            : `Last scan from ${restoredFrom}`}
+        </Text>
+      )}
 
       {error && <Text style={styles.errorBanner}>{error}</Text>}
 
@@ -477,6 +525,16 @@ const styles = StyleSheet.create({
     height: 18,
     backgroundColor: palette.border,
     marginHorizontal: spacing.xs,
+  },
+  cacheBanner: {
+    ...type.label,
+    fontSize: 9,
+    color: palette.saberBlue,
+    backgroundColor: "rgba(79,195,247,0.08)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(79,195,247,0.22)",
+    padding: spacing.sm,
+    textAlign: "center",
   },
   errorBanner: {
     ...type.label,

@@ -11,8 +11,10 @@ import {
   ApplicationsProvider,
   useApplications,
 } from "./src/context/ApplicationsContext";
+import { ProfileProvider } from "./src/context/ProfileContext";
 import { TargetsProvider } from "./src/context/TargetsContext";
 import { FeedScreen } from "./src/screens/FeedScreen";
+import { DossierScreen } from "./src/screens/DossierScreen";
 import { TargetsScreen } from "./src/screens/TargetsScreen";
 import { TrackerScreen } from "./src/screens/TrackerScreen";
 import { palette, type } from "./src/theme";
@@ -57,11 +59,13 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ApplicationsProvider>
-        <TargetsProvider>
-          <StarfieldProvider>
-            <Root />
-          </StarfieldProvider>
-        </TargetsProvider>
+        <ProfileProvider>
+          <TargetsProvider>
+            <StarfieldProvider>
+              <Root />
+            </StarfieldProvider>
+          </TargetsProvider>
+        </ProfileProvider>
       </ApplicationsProvider>
     </SafeAreaProvider>
   );
@@ -120,6 +124,29 @@ function Root() {
                 <ScreenTitle title="Bounty Log" subtitle="Targets under pursuit" />
               ),
               tabBarIcon: ({ color }) => <TabGlyph glyph="▣" color={color} />,
+            }}
+          />
+          <Tab.Screen
+            name="Marks"
+            component={TargetsScreen}
+            options={{
+              headerTitle: () => (
+                <ScreenTitle title="Marks" subtitle="Employers under watch" />
+              ),
+              tabBarIcon: ({ color }) => <TabGlyph glyph="✦" color={color} />,
+            }}
+          />
+          <Tab.Screen
+            name="Dossier"
+            component={DossierScreen}
+            options={{
+              headerTitle: () => (
+                <ScreenTitle
+                  title="Dossier"
+                  subtitle="What the letters are built from"
+                />
+              ),
+              tabBarIcon: ({ color }) => <TabGlyph glyph="▤" color={color} />,
             }}
           />
         </Tab.Navigator>

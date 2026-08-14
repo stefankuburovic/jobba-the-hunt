@@ -13,6 +13,7 @@ import {
   removeInterviewEvent,
 } from "../calendar/interviewCalendar";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { CoverLetterModal } from "../components/CoverLetterModal";
 import { InterviewScheduler } from "../components/InterviewScheduler";
 import { JobCard } from "../components/JobCard";
 import { Starfield } from "../components/Starfield";
@@ -35,6 +36,7 @@ export function TrackerScreen() {
   const [filter, setFilter] = useState<ApplicationStatus | "all">("all");
   const [scheduling, setScheduling] = useState<Application | null>(null);
   const [jettisoning, setJettisoning] = useState<Application | null>(null);
+  const [drafting, setDrafting] = useState<Application | null>(null);
 
   const list = useMemo(() => {
     const all = Object.values(applications).sort(
@@ -189,6 +191,9 @@ export function TrackerScreen() {
               <Pressable onPress={() => Linking.openURL(item.job.url)}>
                 <Text style={styles.link}>Open posting ↗</Text>
               </Pressable>
+              <Pressable onPress={() => setDrafting(item)}>
+                <Text style={styles.link}>Draft letter</Text>
+              </Pressable>
               <Pressable onPress={() => setJettisoning(item)}>
                 <Text style={[styles.link, styles.removeLink]}>Jettison</Text>
               </Pressable>
@@ -196,6 +201,14 @@ export function TrackerScreen() {
           </View>
         )}
       />
+
+      {drafting && (
+        <CoverLetterModal
+          visible
+          job={drafting.job}
+          onClose={() => setDrafting(null)}
+        />
+      )}
 
       {jettisoning && (
         <ConfirmDialog
