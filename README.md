@@ -69,6 +69,11 @@ npx expo run:ios     # or run:android
 npx expo export --platform web --output-dir dist
 ```
 
+On a wide browser window the layout switches shells: navigation moves to a
+left sidebar with the logo in the corner, and the feed becomes a 2–4 column
+grid depending on width. Narrow the window and it returns to the phone
+layout — the breakpoint is the job card, not the device.
+
 Two platform differences, both deliberate:
 
 - **Himalayas is unavailable on the web build.** Every other board sends

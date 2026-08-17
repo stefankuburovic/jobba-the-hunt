@@ -1,6 +1,6 @@
 import React from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import { palette, spacing, type } from "../theme";
+import { modalSheet, palette, spacing, type } from "../theme";
 
 interface Props {
   visible: boolean;
@@ -83,6 +83,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   sheet: {
+    ...modalSheet(520),
     backgroundColor: palette.panel,
     borderWidth: 1,
     borderColor: palette.border,

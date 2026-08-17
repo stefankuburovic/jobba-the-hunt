@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { buildCoverLetter, hasPlaceholders, matchedSkills } from "../coverLetter";
 import { useProfile } from "../context/ProfileContext";
-import { palette, spacing, type } from "../theme";
+import { modalSheet, palette, spacing, type } from "../theme";
 import { Job } from "../types";
 
 interface Props {
@@ -132,6 +132,7 @@ const styles = StyleSheet.create({
   },
   sheetWrap: { padding: spacing.md },
   sheet: {
+    ...modalSheet(680),
     backgroundColor: palette.panel,
     borderWidth: 1,
     borderColor: palette.border,

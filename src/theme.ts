@@ -62,6 +62,17 @@ export const type = {
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
 
 /**
+ * Caps a modal sheet's width.
+ *
+ * On a phone a sheet filling the width is correct. In a browser window it
+ * stretches a confirmation dialog across 1600px, which reads as a page
+ * rather than a dialog — so each sheet gets a ceiling suited to its content.
+ */
+export function modalSheet(maxWidth: number) {
+  return { width: "100%" as const, maxWidth, alignSelf: "center" as const };
+}
+
+/**
  * Caps the reading column on wide screens.
  *
  * On a phone this is a no-op. On a desktop browser the cards were stretching

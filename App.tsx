@@ -7,6 +7,7 @@ import { Platform, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
 import { NoticeProvider } from "./src/components/NoticeProvider";
+import { Sidebar } from "./src/components/Sidebar";
 import { OpeningCrawl } from "./src/components/OpeningCrawl";
 import { StarfieldProvider } from "./src/components/StarfieldProvider";
 import {
@@ -19,6 +20,7 @@ import { FeedScreen } from "./src/screens/FeedScreen";
 import { DossierScreen } from "./src/screens/DossierScreen";
 import { TargetsScreen } from "./src/screens/TargetsScreen";
 import { TrackerScreen } from "./src/screens/TrackerScreen";
+import { useLayout } from "./src/layout";
 import { palette, type } from "./src/theme";
 
 const Tab = createBottomTabNavigator();
@@ -82,6 +84,7 @@ export default function App() {
 // up until that context finishes loading.
 function Root() {
   const { loading } = useApplications();
+  const { sideNav } = useLayout();
   // The crawl is a 14-second title card. That reads as character on a phone
   // you opened deliberately, and as a blank screen on a web page you just
   // landed on — so the web build goes straight to the feed.
@@ -96,7 +99,11 @@ function Root() {
       <NavigationContainer theme={galacticTheme}>
         <StatusBar style="light" />
         <Tab.Navigator
+          // The sidebar carries the product name and the active screen, so the
+          // centred header those screens ship with would just repeat it.
+          tabBar={sideNav ? (props) => <Sidebar {...props} /> : undefined}
           screenOptions={{
+            headerShown: !sideNav,
             headerStyle: {
               backgroundColor: palette.panel,
               borderBottomWidth: 1,
@@ -104,6 +111,7 @@ function Root() {
             },
             headerTintColor: palette.crawl,
             headerTitleAlign: "center",
+            tabBarPosition: sideNav ? "left" : "bottom",
             tabBarStyle: {
               backgroundColor: palette.panel,
               borderTopColor: palette.border,

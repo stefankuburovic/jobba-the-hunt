@@ -19,7 +19,7 @@ function timeAgo(iso: string): string {
  * (location), and the intel scan (description). The lit top edge is what
  * sells it as a projected hologram rather than a flat card.
  */
-export function JobCard({ job }: { job: Job }) {
+export function JobCard({ job, grid = false }: { job: Job; grid?: boolean }) {
   const pay = salaryLabel(job);
   // Several boards send an empty string rather than omitting the field, and
   // `??` only catches null/undefined — so an empty location rendered as a
@@ -31,7 +31,7 @@ export function JobCard({ job }: { job: Job }) {
   );
 
   return (
-    <View style={[styles.card, reference && styles.cardFlagged]}>
+    <View style={[styles.card, grid && styles.cardGrid, reference && styles.cardFlagged]}>
       <View style={[styles.topEdge, reference && styles.topEdgeFlagged]} />
 
       {reference && (
@@ -68,7 +68,10 @@ export function JobCard({ job }: { job: Job }) {
         </View>
       )}
 
-      <Text style={styles.description} numberOfLines={3}>
+      <Text
+        style={styles.description}
+        numberOfLines={grid ? 4 : 3}
+      >
         {job.description}
       </Text>
     </View>
@@ -84,6 +87,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     overflow: "hidden",
   },
+  // In a grid the cell owns the spacing, and cards in a row have to reach the
+  // same height or the layout turns ragged.
+  cardGrid: { flex: 1, marginHorizontal: 0 },
   // A flagged card trades the blue projector beam for crawl yellow, so it
   // reads as special at a glance while scrolling.
   cardFlagged: {

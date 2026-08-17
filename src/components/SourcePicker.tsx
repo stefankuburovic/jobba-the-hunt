@@ -2,7 +2,7 @@ import React from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { ALL_SOURCE_FILTERS, SourceFilter } from "../api";
 import { SOURCES } from "../api/sources";
-import { palette, spacing, type } from "../theme";
+import { modalSheet, palette, spacing, type } from "../theme";
 
 interface Props {
   visible: boolean;
@@ -96,6 +96,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   sheet: {
+    ...modalSheet(480),
     backgroundColor: palette.panel,
     borderWidth: 1,
     borderColor: palette.border,

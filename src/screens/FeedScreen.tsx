@@ -39,6 +39,7 @@ import {
   SortMode,
   sortJobs,
 } from "../sorting";
+import { CONTENT_MAX_WIDTH, useLayout } from "../layout";
 import { contentColumn, palette, spacing, type } from "../theme";
 import { Job } from "../types";
 
@@ -72,6 +73,7 @@ export function FeedScreen() {
   const { burst, jumpToLightspeed, reset } = useStarfield();
   const scan = useScanTicker();
   const { notify } = useNotice();
+  const { columns } = useLayout();
 
   const cursor = useRef<FeedCursor | null>(null);
   const seenIds = useRef(new Set<string>());
@@ -266,6 +268,11 @@ export function FeedScreen() {
     [jobs, filters, sort]
   );
 
+  // FlatList caches its column count, so the key forces a remount when the
+  // window crosses a breakpoint — otherwise rows keep the old geometry.
+  const gridKey = `cols-${columns}`;
+  const listMaxWidth = columns > 1 ? CONTENT_MAX_WIDTH : contentColumn.maxWidth;
+
   const toggle = (key: keyof FeedFilters) =>
     setFilters((f) => ({ ...f, [key]: !f[key] }));
 
@@ -274,7 +281,7 @@ export function FeedScreen() {
       <Starfield />
 
       <View style={styles.scanBar}>
-        <View style={styles.searchRow}>
+        <View style={[styles.searchRow, { maxWidth: listMaxWidth }]}>
           <TextInput
             style={styles.searchInput}
             value={search}
@@ -293,7 +300,7 @@ export function FeedScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.controlRow}
+          contentContainerStyle={[styles.controlRow, { maxWidth: listMaxWidth }]}
         >
           {SORT_ORDER.map((mode) => (
             <Pressable
@@ -380,9 +387,12 @@ export function FeedScreen() {
         </View>
       ) : (
         <FlatList
+          key={gridKey}
+          numColumns={columns}
+          columnWrapperStyle={columns > 1 ? styles.row : undefined}
           data={visible}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={[{ paddingBottom: spacing.xl }, contentColumn]}
+          contentContainerStyle={[styles.listContent, { maxWidth: listMaxWidth }]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -429,9 +439,9 @@ export function FeedScreen() {
             </View>
           }
           renderItem={({ item }) => (
-            <View>
-              <JobCard job={item} />
-              <View style={styles.actionRow}>
+            <View style={columns > 1 ? styles.cell : undefined}>
+              <JobCard job={item} grid={columns > 1} />
+              <View style={[styles.actionRow, columns > 1 && styles.actionRowGrid]}>
                 <Pressable
                   style={[styles.actionButton, isSaved(item.id) && styles.trackedButton]}
                   disabled={isSaved(item.id)}
@@ -509,6 +519,13 @@ function Attribution() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.void },
+  listContent: {
+    paddingBottom: spacing.xl,
+    width: "100%",
+    alignSelf: "center",
+  },
+  row: { gap: spacing.md, paddingHorizontal: spacing.md, alignItems: "stretch" },
+  cell: { flex: 1, marginTop: spacing.md },
   scanBar: {
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
@@ -517,7 +534,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(14,19,28,0.85)",
   },
   searchRow: {
-    ...contentColumn,
+    width: "100%",
+    alignSelf: "center",
     flexDirection: "row",
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
@@ -542,7 +560,8 @@ const styles = StyleSheet.create({
   },
   searchButtonText: { ...type.label, fontSize: 12, color: palette.crawl },
   controlRow: {
-    ...contentColumn,
+    width: "100%",
+    alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
@@ -631,6 +650,7 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.md,
     marginTop: spacing.sm,
   },
+  actionRowGrid: { marginHorizontal: 0 },
   actionButton: {
     flex: 1,
     borderWidth: 1,

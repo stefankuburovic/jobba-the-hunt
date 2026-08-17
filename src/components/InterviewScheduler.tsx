@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { palette, spacing, type } from "../theme";
+import { modalSheet, palette, spacing, type } from "../theme";
 
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 const MONTHS = [
@@ -199,6 +199,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   sheet: {
+    ...modalSheet(460),
     backgroundColor: palette.panel,
     borderWidth: 1,
     borderColor: palette.border,
