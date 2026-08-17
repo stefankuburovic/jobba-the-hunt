@@ -51,7 +51,8 @@ registered trademark and is not used.
 
 ```sh
 npm install
-npx expo start
+npx expo start        # phone via Expo Go
+npx expo start --web  # browser
 ```
 
 Everything works in Expo Go **except** calendar sync — `expo-calendar` has no
@@ -61,6 +62,23 @@ app says which of the two happened. For real calendar events:
 ```sh
 npx expo run:ios     # or run:android
 ```
+
+### Web
+
+```sh
+npx expo export --platform web --output-dir dist
+```
+
+Two platform differences, both deliberate:
+
+- **Himalayas is unavailable on the web build.** Every other board sends
+  `Access-Control-Allow-Origin: *`; Himalayas sends no CORS header, so a
+  browser blocks the response before the app sees it. Proxying it would mean
+  running a backend, which this project doesn't have. The source picker shows
+  7 of 7 rather than pretending the eighth is merely broken.
+- **The opening crawl is skipped on the web.** A 14-second title card reads
+  as character on a phone you opened deliberately, and as a blank page on a
+  URL you just landed on.
 
 ## Notes on the build
 

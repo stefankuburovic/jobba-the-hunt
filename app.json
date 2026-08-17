@@ -22,7 +22,14 @@
       "package": "com.stefankuburovic.jobbathehunt"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single",
+      "name": "Jobba the Hunt",
+      "shortName": "Jobba",
+      "backgroundColor": "#05060A",
+      "themeColor": "#05060A",
+      "description": "Job postings from eight public boards in one feed, with an application tracker."
     },
     "plugins": [
       [

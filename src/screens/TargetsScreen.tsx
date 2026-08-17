@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Starfield } from "../components/Starfield";
 import { useTargets } from "../context/TargetsContext";
-import { palette, spacing, type } from "../theme";
+import { contentColumn, palette, spacing, type } from "../theme";
 
 // Well-known boards, offered as a starting point rather than added for you.
 const SUGGESTIONS = ["stripe", "gitlab", "figma", "duolingo", "vercel"];
@@ -64,7 +64,7 @@ export function TargetsScreen() {
       <FlatList
         data={targets}
         keyExtractor={(t) => t}
-        contentContainerStyle={{ paddingBottom: spacing.xl }}
+        contentContainerStyle={[{ paddingBottom: spacing.xl }, contentColumn]}
         ListEmptyComponent={
           <View style={styles.emptyBox}>
             <Text style={styles.emptyHeadline}>No marks yet</Text>
@@ -107,6 +107,7 @@ export function TargetsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.void },
   addBar: {
+    ...contentColumn,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     borderBottomWidth: 1,

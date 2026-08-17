@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import {
-  Alert,
   FlatList,
   Linking,
   Pressable,
@@ -14,12 +13,13 @@ import {
 } from "../calendar/interviewCalendar";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { CoverLetterModal } from "../components/CoverLetterModal";
+import { useNotice } from "../components/NoticeProvider";
 import { InterviewScheduler } from "../components/InterviewScheduler";
 import { JobCard } from "../components/JobCard";
 import { Starfield } from "../components/Starfield";
 import { useApplications } from "../context/ApplicationsContext";
 import { failureMessage } from "../messages";
-import { palette, spacing, type } from "../theme";
+import { contentColumn, palette, spacing, type } from "../theme";
 import {
   Application,
   ApplicationStatus,
@@ -37,6 +37,7 @@ export function TrackerScreen() {
   const [scheduling, setScheduling] = useState<Application | null>(null);
   const [jettisoning, setJettisoning] = useState<Application | null>(null);
   const [drafting, setDrafting] = useState<Application | null>(null);
+  const { notify } = useNotice();
 
   const list = useMemo(() => {
     const all = Object.values(applications).sort(
@@ -90,13 +91,12 @@ export function TrackerScreen() {
     await setStatus(app.jobId, "interview");
 
     if (result.ok) {
-      Alert.alert(
-        "Audience locked in",
-        "Added to your calendar with reminders a day and an hour before."
-      );
+      notify({
+        headline: "Audience locked in",
+        detail: "Added to your calendar with reminders a day and an hour before.",
+      });
     } else {
-      const { headline, detail } = failureMessage(result.reason);
-      Alert.alert(headline, detail);
+      notify({ ...failureMessage(result.reason), tone: "warn" });
     }
   };
 
@@ -143,7 +143,7 @@ export function TrackerScreen() {
       <FlatList
         data={list}
         keyExtractor={(a) => a.jobId}
-        contentContainerStyle={{ paddingBottom: spacing.xl }}
+        contentContainerStyle={[{ paddingBottom: spacing.xl }, contentColumn]}
         ListEmptyComponent={
           <Text style={styles.empty}>
             The bounty log is empty.{"\n"}Track a target from the Bounty Board.

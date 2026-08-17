@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { AggregatorSource, Job } from "../types";
 import { fetchArbeitnowPage, RateLimitError } from "./arbeitnow";
 import { withoutExcludedIndustries } from "./excluded";
@@ -27,7 +28,22 @@ export interface ScanEvent {
 /** Every toggleable source, including Greenhouse as one combined entry. */
 export type SourceFilter = AggregatorSource | "greenhouse";
 
-export const ALL_SOURCE_FILTERS: SourceFilter[] = [
+/**
+ * Sources a browser cannot reach.
+ *
+ * Every other board sends `Access-Control-Allow-Origin: *`; Himalayas sends
+ * no CORS header at all, so the browser blocks the response before our code
+ * sees it. Rather than surface that as a mystery outage, the web build
+ * doesn't offer it — proxying it would mean running a backend, which this
+ * project deliberately doesn't have.
+ */
+export const CORS_BLOCKED_SOURCES: SourceFilter[] = ["himalayas"];
+
+export function isSourceAvailable(source: SourceFilter): boolean {
+  return Platform.OS !== "web" || !CORS_BLOCKED_SOURCES.includes(source);
+}
+
+const EVERY_SOURCE: SourceFilter[] = [
   "remotive",
   "arbeitnow",
   "remoteok",
@@ -37,6 +53,10 @@ export const ALL_SOURCE_FILTERS: SourceFilter[] = [
   "weworkremotely",
   "greenhouse",
 ];
+
+export const ALL_SOURCE_FILTERS: SourceFilter[] = EVERY_SOURCE.filter(
+  isSourceAvailable
+);
 
 export interface FeedRequest {
   /** Empty means "show me everything" — no keyword filtering at all. */
@@ -111,7 +131,8 @@ export async function fetchFeedPage({
   cursor = null,
   onProgress,
 }: FeedRequest = {}): Promise<FeedResult> {
-  const enabled = (id: SourceFilter) => sources.includes(id);
+  const enabled = (id: SourceFilter) =>
+    sources.includes(id) && isSourceAvailable(id);
   const report = (label: string, count: number, ok: boolean) =>
     onProgress?.({ label, count, ok });
   const isFirstBatch = cursor === null;

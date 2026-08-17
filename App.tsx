@@ -3,9 +3,10 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
+import { NoticeProvider } from "./src/components/NoticeProvider";
 import { OpeningCrawl } from "./src/components/OpeningCrawl";
 import { StarfieldProvider } from "./src/components/StarfieldProvider";
 import {
@@ -65,7 +66,9 @@ export default function App() {
           <ProfileProvider>
             <TargetsProvider>
               <StarfieldProvider>
-                <Root />
+                <NoticeProvider>
+                  <Root />
+                </NoticeProvider>
               </StarfieldProvider>
             </TargetsProvider>
           </ProfileProvider>
@@ -79,7 +82,10 @@ export default function App() {
 // up until that context finishes loading.
 function Root() {
   const { loading } = useApplications();
-  const [introDone, setIntroDone] = useState(false);
+  // The crawl is a 14-second title card. That reads as character on a phone
+  // you opened deliberately, and as a blank screen on a web page you just
+  // landed on — so the web build goes straight to the feed.
+  const [introDone, setIntroDone] = useState(Platform.OS === "web");
 
   useEffect(() => {
     if (!loading) SplashScreen.hideAsync().catch(() => {});

@@ -61,6 +61,19 @@ export const type = {
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
 
+/**
+ * Caps the reading column on wide screens.
+ *
+ * On a phone this is a no-op. On a desktop browser the cards were stretching
+ * to the full viewport, putting job descriptions at ~140 characters a line,
+ * which is well past comfortable reading.
+ */
+export const contentColumn = {
+  width: "100%" as const,
+  maxWidth: 900,
+  alignSelf: "center" as const,
+};
+
 // A holo panel: dark fill, lit edge, soft blue bloom underneath.
 export const holoPanel = {
   backgroundColor: palette.panelTranslucent,

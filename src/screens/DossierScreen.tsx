@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Starfield } from "../components/Starfield";
 import { EMPTY_PROFILE, Profile, useProfile } from "../context/ProfileContext";
-import { palette, spacing, type } from "../theme";
+import { contentColumn, palette, spacing, type } from "../theme";
 
 interface FieldSpec {
   key: keyof Profile;
@@ -108,7 +108,7 @@ export function DossierScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.void },
-  content: { padding: spacing.md, paddingBottom: spacing.xl * 2 },
+  content: { ...contentColumn, padding: spacing.md, paddingBottom: spacing.xl * 2 },
   intro: {
     ...type.body,
     fontSize: 11,

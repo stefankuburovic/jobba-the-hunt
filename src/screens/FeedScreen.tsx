@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Linking,
   Pressable,
@@ -15,6 +14,7 @@ import {
 import { ALL_SOURCE_FILTERS, FeedCursor, fetchFeedPage, SourceFilter } from "../api";
 import { requiredAttributions, SOURCES } from "../api/sources";
 import { JobCard } from "../components/JobCard";
+import { useNotice } from "../components/NoticeProvider";
 import { ScanTicker, useScanTicker } from "../components/ScanTicker";
 import { SourcePicker } from "../components/SourcePicker";
 import { Starfield } from "../components/Starfield";
@@ -39,7 +39,7 @@ import {
   SortMode,
   sortJobs,
 } from "../sorting";
-import { palette, spacing, type } from "../theme";
+import { contentColumn, palette, spacing, type } from "../theme";
 import { Job } from "../types";
 
 const isFlagged = (job: Job) =>
@@ -71,6 +71,7 @@ export function FeedScreen() {
   const { targets } = useTargets();
   const { burst, jumpToLightspeed, reset } = useStarfield();
   const scan = useScanTicker();
+  const { notify } = useNotice();
 
   const cursor = useRef<FeedCursor | null>(null);
   const seenIds = useRef(new Set<string>());
@@ -242,7 +243,7 @@ export function FeedScreen() {
       const can = await Linking.canOpenURL(job.url);
       if (!can) {
         const { headline, detail } = failureMessage("link_failed");
-        Alert.alert(headline, `${detail}\n\n${job.url}`);
+        notify({ headline, detail: `${detail}\n\n${job.url}`, tone: "warn" });
         return;
       }
 
@@ -255,7 +256,7 @@ export function FeedScreen() {
       // app lands on the normal feed rather than a white screen.
       setTimeout(reset, 900);
     },
-    [saveJob, jumpToLightspeed, reset]
+    [saveJob, jumpToLightspeed, reset, notify]
   );
 
   // Sorting and filtering are view concerns: they reshape what's already
@@ -381,7 +382,7 @@ export function FeedScreen() {
         <FlatList
           data={visible}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: spacing.xl }}
+          contentContainerStyle={[{ paddingBottom: spacing.xl }, contentColumn]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -515,7 +516,12 @@ const styles = StyleSheet.create({
     borderBottomColor: palette.border,
     backgroundColor: "rgba(14,19,28,0.85)",
   },
-  searchRow: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.md },
+  searchRow: {
+    ...contentColumn,
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
   searchInput: {
     ...type.body,
     flex: 1,
@@ -536,6 +542,7 @@ const styles = StyleSheet.create({
   },
   searchButtonText: { ...type.label, fontSize: 12, color: palette.crawl },
   controlRow: {
+    ...contentColumn,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
