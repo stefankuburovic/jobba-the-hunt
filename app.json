@@ -47,6 +47,9 @@
           "calendarPermission": "Jobba the Hunt adds your interviews to your calendar so you get a reminder before each one."
         }
       ]
-    ]
+    ],
+    "experiments": {
+      "baseUrl": "/jobba-the-hunt"
+    }
   }
 }

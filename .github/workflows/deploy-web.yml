@@ -1,0 +1,60 @@
+name: Deploy web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Required by actions/deploy-pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A newer push should win rather than queue behind an in-flight deploy.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # The suite is pure logic and runs in under a second — no reason to
+      # publish a build that fails it.
+      - run: npx jest
+      - run: npx tsc --noEmit
+
+      - run: npx expo export --platform web --output-dir dist
+
+      # Expo emits assets into `_expo/`, and GitHub Pages runs Jekyll by
+      # default, which skips paths beginning with an underscore.
+      - run: touch dist/.nojekyll
+
+      # Single-page output has no server-side rewrite, so a refresh on a tab
+      # route would 404. Pages serves 404.html for unknown paths, which hands
+      # the route back to the client router.
+      - run: cp dist/index.html dist/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

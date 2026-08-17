@@ -2,6 +2,8 @@
 
 # Jobba the Hunt
 
+**[Try it in a browser →](https://stefankuburovic.github.io/jobba-the-hunt/)**
+
 A React Native job-hunting app that pulls postings from eight public job
 boards into one feed, tracks what you've applied to, and puts your
 interviews on your calendar.
@@ -68,6 +70,13 @@ npx expo run:ios     # or run:android
 ```sh
 npx expo export --platform web --output-dir dist
 ```
+
+Pushing to `main` deploys the browser build to GitHub Pages
+([workflow](.github/workflows/deploy-web.yml)). Two details that are easy to
+miss there: the export needs `experiments.baseUrl` set to the repo name or
+every asset URL 404s under the project sub-path, and it needs a `.nojekyll`
+file because Pages runs Jekyll by default and Jekyll skips the `_expo/`
+directory Expo emits its bundle into.
 
 On a wide browser window the layout switches shells: navigation moves to a
 left sidebar with the logo in the corner, and the feed becomes a 2–4 column
